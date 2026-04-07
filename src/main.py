@@ -1,5 +1,8 @@
+from storage import load_tasks
+
 def main():
-    print("Planpal starting...")
+    tasks = load_tasks()
+    print("Loaded tasks:", tasks)
 
 if __name__ == "__main__":
     main()
