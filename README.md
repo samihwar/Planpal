@@ -23,7 +23,7 @@ This version uses **Ollama LLM** (`llama3`) to parse tasks instead of `dateparse
 
 1. Clone the repository:
 ```bash
-git clone <your-repo-url>
+git clone <https://github.com/samihwar/Planpal.git>
 cd Planpal
 ```
 2.Set up the Python virtual environment:
