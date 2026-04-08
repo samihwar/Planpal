@@ -5,7 +5,7 @@ Currently uses Ollama locally, ready to scale to cloud LLMs.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict
 import json
 import logging
 
