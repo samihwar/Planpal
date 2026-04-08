@@ -208,7 +208,7 @@ class TaskParser:
         Factory method to create TaskParser with specified backend.
         
         Args:
-            backend: "ollama", "openai", or "anthropic"
+            backend: "ollama" or "openai"
             **kwargs: Backend-specific configuration
             
         Returns:
