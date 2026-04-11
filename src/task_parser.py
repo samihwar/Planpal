@@ -27,18 +27,31 @@ class TaskParserBackend(ABC):
             dict with keys:
                 - title (str): short summary
                 - description (str): full description
-                - due (str): ISO 8601 timestamp
-                - duration (float): hours as number
+                - date (str | None): task date as YYYY-MM-DD
+                - time (str | None): task time as HH:MM in 24-hour format
+                - duration (float | None): hours as number
                 
         Raises:
             RuntimeError: If LLM service fails
             ValueError: If output is invalid
         """
         pass
+
+    @abstractmethod
+    def resolve_temporal_update(self, task: Dict, answer: str) -> Dict:
+        """
+        Resolve a date/time follow-up using the current task as context.
+
+        Returns:
+            dict with keys:
+                - date (str | None)
+                - time (str | None)
+        """
+        pass
     
     def _validate_output(self, parsed: Dict) -> None:
         """Validate parsed output has required fields."""
-        required_fields = {"title", "description", "due", "duration"}
+        required_fields = {"title", "description", "date", "time", "duration"}
         missing = required_fields - set(parsed.keys())
         if missing:
             raise ValueError(f"Missing required fields: {missing}")
@@ -48,10 +61,33 @@ class TaskParserBackend(ABC):
             raise ValueError("title must be a string")
         if not isinstance(parsed["description"], str):
             raise ValueError("description must be a string")
-        if not isinstance(parsed["due"], str):
-            raise ValueError("due must be an ISO 8601 string")
-        if not isinstance(parsed["duration"], (int, float)):
-            raise ValueError("duration must be a number")
+        if parsed["date"] is not None and not isinstance(parsed["date"], str):
+            raise ValueError("date must be a YYYY-MM-DD string or null")
+        if parsed["time"] is not None and not isinstance(parsed["time"], str):
+            raise ValueError("time must be an HH:MM string or null")
+        if parsed["duration"] is not None and not isinstance(parsed["duration"], (int, float)):
+            raise ValueError("duration must be a number or null")
+
+    def _validate_temporal_output(self, parsed: Dict) -> None:
+        """Validate temporal follow-up output."""
+        required_fields = {"date", "time"}
+        missing = required_fields - set(parsed.keys())
+        if missing:
+            raise ValueError(f"Missing required fields: {missing}")
+
+        if parsed["date"] is not None and not isinstance(parsed["date"], str):
+            raise ValueError("date must be a YYYY-MM-DD string or null")
+        if parsed["time"] is not None and not isinstance(parsed["time"], str):
+            raise ValueError("time must be an HH:MM string or null")
+
+    def _validate_midnight_check_output(self, parsed: Dict) -> None:
+        """Validate midnight check output."""
+        required_fields = {"keep_midnight_time"}
+        missing = required_fields - set(parsed.keys())
+        if missing:
+            raise ValueError(f"Missing required fields: {missing}")
+        if not isinstance(parsed["keep_midnight_time"], bool):
+            raise ValueError("keep_midnight_time must be a boolean")
 
 
 class OllamaBackend(TaskParserBackend):
@@ -72,9 +108,9 @@ class OllamaBackend(TaskParserBackend):
     def parse(self, text: str) -> Dict:
         import requests
         
-        today = datetime.now().strftime("%Y-%m-%d")
+        current_local_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        prompt = self._build_prompt(text, today)
+        prompt = self._build_prompt(text, current_local_datetime)
         
         try:
             response = requests.post(
@@ -93,6 +129,7 @@ class OllamaBackend(TaskParserBackend):
             parsed = json.loads(output)
             
             self._validate_output(parsed)
+            parsed = self._clear_unconfirmed_midnight(parsed, text)
             logger.debug(f"Successfully parsed task: {parsed['title']}")
             return parsed
             
@@ -108,25 +145,157 @@ class OllamaBackend(TaskParserBackend):
         except (json.JSONDecodeError, KeyError) as e:
             logger.error(f"Failed to parse Ollama response: {output}")
             raise ValueError(f"Invalid response from Ollama: {e}") from e
+
+    def resolve_temporal_update(self, task: Dict, answer: str) -> Dict:
+        import requests
+
+        current_local_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
+        prompt = self._build_temporal_update_prompt(task, answer, current_local_datetime)
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+
+            output = response.json()["response"]
+            parsed = json.loads(output)
+
+            self._validate_temporal_output(parsed)
+            parsed = self._clear_unconfirmed_midnight(parsed, answer)
+            return parsed
+
+        except requests.Timeout:
+            logger.error("Ollama temporal follow-up request timed out")
+            raise RuntimeError("Temporal follow-up parsing timed out. Ollama may be overloaded.")
+        except requests.ConnectionError:
+            logger.error("Cannot connect to Ollama")
+            raise RuntimeError("Cannot connect to Ollama. Is it running?")
+        except requests.RequestException as e:
+            logger.error(f"Ollama API error: {e}")
+            raise RuntimeError(f"Ollama API request failed: {e}") from e
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse Ollama temporal follow-up response: {output}")
+            raise ValueError(f"Invalid temporal follow-up response from Ollama: {e}") from e
     
-    def _build_prompt(self, text: str, today: str) -> str:
+    def _build_prompt(self, text: str, current_local_datetime: str) -> str:
         """Build the parsing prompt."""
-        return f"""You are a task parser. Today's date is {today}.
+        return f"""You are a task parser. The current local datetime is {current_local_datetime}.
 
 Convert the following into a JSON object with these exact fields:
-- title: short summary (max 100 characters)
+- title: short title (max 50 characters)
 - description: full description of the task
-- due: ISO 8601 timestamp of when task starts (e.g., "2025-04-09T10:00:00")
+- date: date only in YYYY-MM-DD format
+- time: time only in 24-hour HH:MM format
 - duration: hours as a number (e.g., 2.5 for 2.5 hours)
 
 Rules:
-- Convert relative dates ("tomorrow", "next Friday") to absolute dates based on today
-- If no time specified, use 09:00:00 as default
-- If no duration specified, use 1.0 hour as default
+- The input may be written in any language and may use casual day-to-day phrasing
+- Preserve the user's language in the title and description
+- Convert any date expression you can confidently understand into the date field
+- Convert any time expression you can confidently understand into the time field using 24-hour HH:MM
+- If a time is given without a date, assume the next matching occurrence relative to the current local datetime
+- If the user gives only a date or day reference and no time, set time to null
+- Never invent a default time such as 00:00, midnight, or any other fallback time
+- Output 00:00 only if the user explicitly indicates midnight or 00:00
+- Keep title and description always filled based on the sentence, even if other details are missing
+- If the date is missing or cannot be inferred, use null
+- If the time is missing or cannot be inferred, use null
+- If the duration is missing or cannot be inferred, use null
+- Return only valid JSON and never include markdown or explanations
 
 Input: "{text}"
 
 Output only valid JSON, no explanation or markdown formatting."""
+
+    def _build_temporal_update_prompt(self, task: Dict, answer: str, current_local_datetime: str) -> str:
+        """Build the temporal follow-up prompt."""
+        task_json = json.dumps(task, ensure_ascii=True)
+        return f"""You resolve missing scheduling details for a task. The current local datetime is {current_local_datetime}.
+
+Existing task JSON:
+{task_json}
+
+User clarification:
+"{answer}"
+
+Return a JSON object with these exact fields:
+- date: final date in YYYY-MM-DD format or null
+- time: final time in 24-hour HH:MM format or null
+
+Rules:
+- The clarification may be written in any language and may be informal
+- Use the existing task and the clarification together
+- Preserve an existing date or time when the clarification does not change it
+- If the clarification adds both date and time, return both updated values
+- If a time is given without a date, assume the next matching occurrence relative to the current local datetime
+- If the clarification gives only a date or day reference and no time, keep time null unless the existing task already has a time
+- Never invent a default time such as 00:00, midnight, or any other fallback time
+- Output 00:00 only if the user explicitly indicates midnight or 00:00
+- Return only valid JSON, with no explanation and no markdown
+"""
+
+    def _clear_unconfirmed_midnight(self, parsed: Dict, source_text: str) -> Dict:
+        """Clear 00:00 unless the user explicitly asked for midnight."""
+        if parsed.get("time") != "00:00":
+            return parsed
+        if self._should_keep_midnight_time(source_text):
+            return parsed
+        updated = dict(parsed)
+        updated["time"] = None
+        return updated
+
+    def _should_keep_midnight_time(self, source_text: str) -> bool:
+        import requests
+
+        current_local_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
+        prompt = self._build_midnight_check_prompt(source_text, current_local_datetime)
+
+        try:
+            response = requests.post(
+                f"{self.base_url}/api/generate",
+                json={
+                    "model": self.model,
+                    "prompt": prompt,
+                    "stream": False,
+                    "format": "json"
+                },
+                timeout=30
+            )
+            response.raise_for_status()
+
+            output = response.json()["response"]
+            parsed = json.loads(output)
+            self._validate_midnight_check_output(parsed)
+            return parsed["keep_midnight_time"]
+
+        except Exception as e:
+            logger.warning(f"Midnight confirmation check failed, clearing time defensively: {e}")
+            return False
+
+    def _build_midnight_check_prompt(self, source_text: str, current_local_datetime: str) -> str:
+        """Build the midnight confirmation prompt."""
+        return f"""You decide whether a user's text explicitly asks for midnight. The current local datetime is {current_local_datetime}.
+
+User text:
+"{source_text}"
+
+Return a JSON object with this exact field:
+- keep_midnight_time: true if the user explicitly asked for midnight or 00:00, otherwise false
+
+Rules:
+- The text may be written in any language
+- Return true only when midnight is explicitly requested
+- If the text only mentions a date or day such as tomorrow, return false
+- Return only valid JSON
+"""
 
 
 class OpenAIBackend(TaskParserBackend):
@@ -151,9 +320,9 @@ class OpenAIBackend(TaskParserBackend):
             raise RuntimeError("openai package not installed. Run: pip install openai")
         
         client = OpenAI(api_key=self.api_key)
-        today = datetime.now().strftime("%Y-%m-%d")
+        current_local_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
         
-        prompt = self._build_prompt(text, today)
+        prompt = self._build_prompt(text, current_local_datetime)
         
         try:
             response = client.chat.completions.create(
@@ -165,26 +334,145 @@ class OpenAIBackend(TaskParserBackend):
             
             parsed = json.loads(response.choices[0].message.content)
             self._validate_output(parsed)
+            parsed = self._clear_unconfirmed_midnight(parsed, text)
             logger.debug(f"Successfully parsed task: {parsed['title']}")
             return parsed
             
         except Exception as e:
             logger.error(f"OpenAI API error: {e}")
             raise RuntimeError(f"OpenAI API request failed: {e}") from e
+
+    def resolve_temporal_update(self, task: Dict, answer: str) -> Dict:
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise RuntimeError("openai package not installed. Run: pip install openai")
+
+        client = OpenAI(api_key=self.api_key)
+        current_local_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
+        prompt = self._build_temporal_update_prompt(task, answer, current_local_datetime)
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                timeout=30
+            )
+
+            parsed = json.loads(response.choices[0].message.content)
+            self._validate_temporal_output(parsed)
+            parsed = self._clear_unconfirmed_midnight(parsed, answer)
+            return parsed
+
+        except Exception as e:
+            logger.error(f"OpenAI API error: {e}")
+            raise RuntimeError(f"OpenAI API request failed: {e}") from e
     
-    def _build_prompt(self, text: str, today: str) -> str:
+    def _build_prompt(self, text: str, current_local_datetime: str) -> str:
         """Build the parsing prompt."""
-        return f"""You are a task parser. Today's date is {today}.
+        return f"""You are a task parser. The current local datetime is {current_local_datetime}.
 
 Convert the following into a JSON object with these exact fields:
 - title: short summary
 - description: full description
-- due: ISO 8601 timestamp of start
-- duration: hours as a number
+- date: date only in YYYY-MM-DD format
+- time: time only in 24-hour HH:MM format
+- duration: hours as a number or null
+
+Rules:
+- The input may be written in any language
+- Preserve the user's language in the title and description
+- If a time is given without a date, assume the next matching occurrence relative to the current local datetime
+- If the user gives only a date or day reference and no time, set time to null
+- Never invent a default time such as 00:00, midnight, or any other fallback time
+- Output 00:00 only if the user explicitly indicates midnight or 00:00
+- Keep title and description always filled
+- Use null for missing date, time, or duration
 
 Input: "{text}"
 
 Output only valid JSON."""
+
+    def _build_temporal_update_prompt(self, task: Dict, answer: str, current_local_datetime: str) -> str:
+        """Build the temporal follow-up prompt."""
+        task_json = json.dumps(task, ensure_ascii=True)
+        return f"""You resolve missing scheduling details for a task. The current local datetime is {current_local_datetime}.
+
+Existing task JSON:
+{task_json}
+
+User clarification:
+"{answer}"
+
+Return a JSON object with these exact fields:
+- date: final date in YYYY-MM-DD format or null
+- time: final time in 24-hour HH:MM format or null
+
+Rules:
+- The clarification may be written in any language and may be informal
+- Use the existing task and the clarification together
+- Preserve an existing date or time when the clarification does not change it
+- If the clarification adds both date and time, return both updated values
+- If a time is given without a date, assume the next matching occurrence relative to the current local datetime
+- If the clarification gives only a date or day reference and no time, keep time null unless the existing task already has a time
+- Never invent a default time such as 00:00, midnight, or any other fallback time
+- Output 00:00 only if the user explicitly indicates midnight or 00:00
+- Return only valid JSON
+"""
+
+    def _clear_unconfirmed_midnight(self, parsed: Dict, source_text: str) -> Dict:
+        """Clear 00:00 unless the user explicitly asked for midnight."""
+        if parsed.get("time") != "00:00":
+            return parsed
+        if self._should_keep_midnight_time(source_text):
+            return parsed
+        updated = dict(parsed)
+        updated["time"] = None
+        return updated
+
+    def _should_keep_midnight_time(self, source_text: str) -> bool:
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise RuntimeError("openai package not installed. Run: pip install openai")
+
+        client = OpenAI(api_key=self.api_key)
+        current_local_datetime = datetime.now().strftime("%Y-%m-%d %H:%M")
+        prompt = self._build_midnight_check_prompt(source_text, current_local_datetime)
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                timeout=30
+            )
+
+            parsed = json.loads(response.choices[0].message.content)
+            self._validate_midnight_check_output(parsed)
+            return parsed["keep_midnight_time"]
+
+        except Exception as e:
+            logger.warning(f"Midnight confirmation check failed, clearing time defensively: {e}")
+            return False
+
+    def _build_midnight_check_prompt(self, source_text: str, current_local_datetime: str) -> str:
+        """Build the midnight confirmation prompt."""
+        return f"""You decide whether a user's text explicitly asks for midnight. The current local datetime is {current_local_datetime}.
+
+User text:
+"{source_text}"
+
+Return a JSON object with this exact field:
+- keep_midnight_time: true if the user explicitly asked for midnight or 00:00, otherwise false
+
+Rules:
+- The text may be written in any language
+- Return true only when midnight is explicitly requested
+- If the text only mentions a date or day such as tomorrow, return false
+- Return only valid JSON
+"""
 
 class TaskParser:
     """
@@ -248,6 +536,10 @@ class TaskParser:
         """
         return self.backend.parse(text)
 
+    def resolve_temporal_update(self, task: Dict, answer: str) -> Dict:
+        """Resolve a date/time follow-up using the backend."""
+        return self.backend.resolve_temporal_update(task, answer)
+
 
 # Convenience function for quick usage
 def parse_task(text: str, backend: str = "ollama", **kwargs) -> Dict:
@@ -266,24 +558,18 @@ def parse_task(text: str, backend: str = "ollama", **kwargs) -> Dict:
     return parser.parse(text)
 
 
-if __name__ == "__main__":
-    # Setup logging for testing
-    logging.basicConfig(level=logging.DEBUG)
-    
-    # Test with Ollama
-    print("Testing with Ollama backend...")
-    parser = TaskParser.create(backend="ollama")
-    
-    test_cases = [
-        "Tomorrow at 10am continue working on Planpal for 2 hours",
-        "Review PR next Monday at 2pm for 30 minutes",
-        "Call mom this Friday at 5pm",
-    ]
-    
-    for task_text in test_cases:
-        print(f"\nInput: {task_text}")
-        try:
-            result = parser.parse(task_text)
-            print(json.dumps(result, indent=2))
-        except Exception as e:
-            print(f"Error: {e}")
+def resolve_temporal_update(task: Dict, answer: str, backend: str = "ollama", **kwargs) -> Dict:
+    """
+    Resolve date/time follow-up text using the current task as context.
+
+    Args:
+        task: Current parsed task
+        answer: User clarification text
+        backend: Backend to use
+        **kwargs: Backend configuration
+
+    Returns:
+        Dict with date/time values
+    """
+    parser = TaskParser.create(backend=backend, **kwargs)
+    return parser.resolve_temporal_update(task, answer)
