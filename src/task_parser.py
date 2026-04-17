@@ -93,16 +93,23 @@ class TaskParserBackend(ABC):
 class OllamaBackend(TaskParserBackend):
     """Ollama-based task parser for local development."""
     
-    def __init__(self, base_url: str = "http://localhost:11434", model: str = "llama3"):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        model: str = "llama3",
+        temperature: float = 0,
+    ):
         """
         Initialize Ollama backend.
         
         Args:
             base_url: Ollama API endpoint
             model: Model name (llama3, mistral, etc.)
+            temperature: Sampling temperature. Lower values are more deterministic.
         """
         self.base_url = base_url
         self.model = model
+        self.temperature = temperature
         logger.info(f"Initialized Ollama backend: {base_url} with model {model}")
     
     def parse(self, text: str) -> Dict:
@@ -119,7 +126,8 @@ class OllamaBackend(TaskParserBackend):
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False,
-                    "format": "json"
+                    "format": "json",
+                    "options": {"temperature": self.temperature},
                 },
                 timeout=30
             )
@@ -159,7 +167,8 @@ class OllamaBackend(TaskParserBackend):
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False,
-                    "format": "json"
+                    "format": "json",
+                    "options": {"temperature": self.temperature},
                 },
                 timeout=30
             )
@@ -265,7 +274,8 @@ Rules:
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False,
-                    "format": "json"
+                    "format": "json",
+                    "options": {"temperature": self.temperature},
                 },
                 timeout=30
             )
@@ -301,16 +311,18 @@ Rules:
 class OpenAIBackend(TaskParserBackend):
     """OpenAI-based task parser for production scale."""
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini", temperature: float = 0):
         """
         Initialize OpenAI backend.
         
         Args:
             api_key: OpenAI API key
             model: Model name (gpt-4o-mini, gpt-4o, etc.)
+            temperature: Sampling temperature. Lower values are more deterministic.
         """
         self.api_key = api_key
         self.model = model
+        self.temperature = temperature
         logger.info(f"Initialized OpenAI backend with model {model}")
     
     def parse(self, text: str) -> Dict:
@@ -329,6 +341,7 @@ class OpenAIBackend(TaskParserBackend):
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
+                temperature=self.temperature,
                 timeout=30
             )
             
@@ -357,6 +370,7 @@ class OpenAIBackend(TaskParserBackend):
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
+                temperature=self.temperature,
                 timeout=30
             )
 
@@ -446,6 +460,7 @@ Rules:
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
+                temperature=self.temperature,
                 timeout=30
             )
 
