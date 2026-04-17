@@ -1,0 +1,8 @@
+{
+  "default": {
+    "timezone": "Asia/Jerusalem",
+    "time_phrase_defaults": {},
+    "followup_preference": "ask_when_ambiguous",
+    "duration_policy": "never_assume"
+  }
+}

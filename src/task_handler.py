@@ -1,10 +1,19 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict, Iterable, List, Mapping
+import re
 
-from task_parser import parse_task, resolve_temporal_update
+from feedback import build_feedback_request, ensure_user_profile, get_adaptive_rules, record_feedback
+from task_parser import parse_task, resolve_temporal_update, revise_parse
 
 
 OPTIONAL_SCHEDULING_FIELDS = ("date", "time", "duration")
+DEFAULT_USER_ID = "default"
+SIMPLE_HOUR_PATTERN = re.compile(r"^\s*(?P<hour>\d{1,2})\s*$")
+SIMPLE_TIME_PATTERN = re.compile(r"^\s*(?P<hour>\d{1,2}):(?P<minute>\d{1,2})\s*$")
+AM_PM_TIME_PATTERN = re.compile(
+    r"^\s*(?P<hour>1[0-2]|0?\d)(?::(?P<minute>[0-5]?\d))?\s*(?P<meridiem>am|pm)\s*$",
+    re.IGNORECASE,
+)
 
 
 def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
@@ -17,27 +26,18 @@ def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _resolve_reference_now(reference_now: datetime | None = None) -> datetime:
-    return reference_now or datetime.now()
-
-
-def _next_occurrence_date(time_text: str, reference_now: datetime | None = None) -> str:
-    current = _resolve_reference_now(reference_now)
-    parsed_time = datetime.strptime(time_text, "%H:%M").time()
-    candidate = datetime.combine(current.date(), parsed_time)
-    if candidate <= current:
-        candidate = candidate + timedelta(days=1)
-    return candidate.strftime("%Y-%m-%d")
-
+def _merge_missing_fields(current_task: Dict[str, Any], revised_task: Dict[str, Any]) -> Dict[str, Any]:
+    merged_task = dict(current_task)
+    for field in ("title", "description", "date", "time", "duration"):
+        if merged_task.get(field) in {None, ""} and revised_task.get(field) not in {None, ""}:
+            merged_task[field] = revised_task[field]
+    return merged_task
 
 def infer_missing_date_from_time(
     task: Dict[str, Any],
     reference_now: datetime | None = None,
 ) -> Dict[str, Any]:
-    updated = dict(task)
-    if updated.get("time") and updated.get("date") is None:
-        updated["date"] = _next_occurrence_date(updated["time"], reference_now=reference_now)
-    return updated
+    return dict(task)
 
 
 def find_missing_info(
@@ -65,18 +65,28 @@ def refresh_task_state(
     task: Dict[str, Any],
     reference_now: datetime | None = None,
     fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
+    followup_preference: str = "ask_when_ambiguous",
 ) -> Dict[str, Any]:
+    active_fields = tuple(fields)
+    if followup_preference == "avoid_optional_followups":
+        active_fields = tuple(field for field in active_fields if field != "duration")
+
     refreshed = infer_missing_date_from_time(task, reference_now=reference_now)
-    refreshed["missing_info"] = find_missing_info(refreshed, fields=fields)
-    refreshed["follow_up_questions"] = build_follow_up_questions(refreshed, fields=fields)
+    refreshed["missing_info"] = find_missing_info(refreshed, fields=active_fields)
+    refreshed["follow_up_questions"] = build_follow_up_questions(refreshed, fields=active_fields)
     return refreshed
 
 
 def next_missing_field(
     task: Dict[str, Any],
     fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
+    followup_preference: str = "ask_when_ambiguous",
 ) -> str | None:
-    missing = find_missing_info(task, fields=fields)
+    active_fields = tuple(fields)
+    if followup_preference == "avoid_optional_followups":
+        active_fields = tuple(field for field in active_fields if field != "duration")
+
+    missing = find_missing_info(task, fields=active_fields)
     return missing[0] if missing else None
 
 
@@ -85,6 +95,7 @@ def update_task_fields(
     updates: Mapping[str, Any],
     reference_now: datetime | None = None,
     fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
+    followup_preference: str = "ask_when_ambiguous",
 ) -> Dict[str, Any]:
     invalid_fields = set(updates) - set(fields)
     if invalid_fields:
@@ -93,7 +104,12 @@ def update_task_fields(
 
     updated = dict(task)
     updated.update(updates)
-    return refresh_task_state(updated, reference_now=reference_now, fields=fields)
+    return refresh_task_state(
+        updated,
+        reference_now=reference_now,
+        fields=fields,
+        followup_preference=followup_preference,
+    )
 
 
 def update_task_field(
@@ -102,12 +118,14 @@ def update_task_field(
     value: Any,
     reference_now: datetime | None = None,
     fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
+    followup_preference: str = "ask_when_ambiguous",
 ) -> Dict[str, Any]:
     return update_task_fields(
         task,
         {field: value},
         reference_now=reference_now,
         fields=fields,
+        followup_preference=followup_preference,
     )
 
 
@@ -118,6 +136,7 @@ def apply_follow_up_answer(
     backend: str = "ollama",
     reference_now: datetime | None = None,
     fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
+    followup_preference: str = "ask_when_ambiguous",
     **kwargs,
 ) -> Dict[str, Any]:
     if field == "duration":
@@ -130,20 +149,35 @@ def apply_follow_up_answer(
             value,
             reference_now=reference_now,
             fields=fields,
+            followup_preference=followup_preference,
         )
 
     if field in {"date", "time"}:
+        if field == "time":
+            normalized_time = _normalize_simple_time_answer(answer)
+            if normalized_time is not None:
+                return update_task_field(
+                    task,
+                    field,
+                    normalized_time,
+                    reference_now=reference_now,
+                    fields=fields,
+                    followup_preference=followup_preference,
+                )
+
         resolved = resolve_temporal_update(task, str(answer), backend=backend, **kwargs)
         updates = {}
-        if "date" in resolved:
+
+        if field == "date" and "date" in resolved:
             updates["date"] = resolved["date"]
-        if "time" in resolved:
+        if field == "time" and "time" in resolved:
             updates["time"] = resolved["time"]
         return update_task_fields(
             task,
             updates,
             reference_now=reference_now,
             fields=fields,
+            followup_preference=followup_preference,
         )
 
     return update_task_field(
@@ -152,7 +186,47 @@ def apply_follow_up_answer(
         answer,
         reference_now=reference_now,
         fields=fields,
+        followup_preference=followup_preference,
     )
+
+
+def _normalize_simple_time_answer(answer: Any) -> str | None:
+    if isinstance(answer, (int, float)):
+        hour = int(answer)
+        if 0 <= hour <= 23:
+            return f"{hour:02d}:00"
+        return None
+
+    if not isinstance(answer, str):
+        return None
+
+    match = SIMPLE_HOUR_PATTERN.fullmatch(answer)
+    if match is not None:
+        hour = int(match.group("hour"))
+        if 0 <= hour <= 23:
+            return f"{hour:02d}:00"
+        return None
+
+    match = SIMPLE_TIME_PATTERN.fullmatch(answer)
+    if match is not None:
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute"))
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return f"{hour:02d}:{minute:02d}"
+        return None
+
+    match = AM_PM_TIME_PATTERN.fullmatch(answer)
+    if match is not None:
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute") or 0)
+        meridiem = match.group("meridiem").lower()
+        if meridiem == "am":
+            hour = 0 if hour == 12 else hour
+        else:
+            hour = 12 if hour == 12 else hour + 12
+        return f"{hour:02d}:{minute:02d}"
+
+    return None
 
 
 def parse_task_with_missing_info(
@@ -160,8 +234,82 @@ def parse_task_with_missing_info(
     backend: str = "ollama",
     reference_now: datetime | None = None,
     fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
+    user_id: str = DEFAULT_USER_ID,
+    user_profile: Mapping[str, Any] | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    parsed = parse_task(text, backend=backend, **kwargs)
-    normalized = normalize_task(parsed)
-    return refresh_task_state(normalized, reference_now=reference_now, fields=fields)
+    effective_profile = ensure_user_profile(user_id, profile=user_profile)
+    adaptive_rules = get_adaptive_rules(user_id, profile=effective_profile)
+    initial_parse = parse_task(
+        text,
+        backend=backend,
+        user_profile=effective_profile,
+        adaptive_rules=adaptive_rules,
+        **kwargs,
+    )
+    normalized = normalize_task(initial_parse)
+    refreshed = refresh_task_state(
+        normalized,
+        reference_now=reference_now,
+        fields=fields,
+        followup_preference=effective_profile["followup_preference"],
+    )
+
+    if refreshed["missing_info"]:
+        revised_parse = revise_parse(
+            text,
+            normalized,
+            backend=backend,
+            user_profile=effective_profile,
+            adaptive_rules=adaptive_rules,
+            **kwargs,
+        )
+        normalized = _merge_missing_fields(normalized, normalize_task(revised_parse))
+        refreshed = refresh_task_state(
+            normalized,
+            reference_now=reference_now,
+            fields=fields,
+            followup_preference=effective_profile["followup_preference"],
+        )
+
+    refreshed["feedback_request"] = build_feedback_request()
+    refreshed["user_id"] = user_id
+    refreshed["user_profile"] = effective_profile
+    refreshed["adaptive_rules"] = adaptive_rules
+    return refreshed
+
+
+def submit_task_feedback(
+    input_text: str,
+    parsed_task: Mapping[str, Any],
+    user_correct: bool,
+    user_id: str = DEFAULT_USER_ID,
+    error_types: Iterable[str] | None = None,
+    corrected_task: Mapping[str, Any] | None = None,
+    notes: str | None = None,
+    reference_now: datetime | None = None,
+    fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
+) -> Dict[str, Any]:
+    feedback_result = record_feedback(
+        input_text=input_text,
+        parsed_task=parsed_task,
+        user_correct=user_correct,
+        user_id=user_id,
+        error_types=error_types,
+        corrected_task=corrected_task,
+        notes=notes,
+    )
+
+    current_task = corrected_task or parsed_task
+    refreshed = refresh_task_state(
+        normalize_task(current_task),
+        reference_now=reference_now,
+        fields=fields,
+        followup_preference=feedback_result["user_profile"]["followup_preference"],
+    )
+    refreshed["feedback_request"] = build_feedback_request()
+    refreshed["feedback_result"] = feedback_result
+    refreshed["user_id"] = user_id
+    refreshed["user_profile"] = feedback_result["user_profile"]
+    refreshed["adaptive_rules"] = feedback_result["adaptive_rules"]
+    return refreshed

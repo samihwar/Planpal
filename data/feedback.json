@@ -1,0 +1,194 @@
+[
+  {
+    "input_text": "eat next sunday at 7am for 1 hour",
+    "parsed_task": {
+      "title": "Eat on Sunday",
+      "description": "Eat next Sunday at 7am for 1 hour",
+      "date": "2026-04-24",
+      "time": "07:00",
+      "duration": 1
+    },
+    "user_correct": false,
+    "error_types": [
+      "wrong_date"
+    ],
+    "corrected_task": {
+      "title": "Eat on Sunday",
+      "description": "Eat next Sunday at 7am for 1 hour",
+      "date": "2026-04-19",
+      "time": "07:00",
+      "duration": 1
+    },
+    "notes": null,
+    "timestamp": "2026-04-17T17:55:42.438955+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "go out",
+    "parsed_task": {
+      "title": "Go Out",
+      "description": "Go out",
+      "date": "2026-04-18",
+      "time": "19:00",
+      "duration": 1.0
+    },
+    "user_correct": true,
+    "error_types": [],
+    "corrected_task": null,
+    "notes": null,
+    "timestamp": "2026-04-17T17:57:27.723990+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "eat next sunday at 7am for 1 hour",
+    "parsed_task": {
+      "title": "Eat on Sunday",
+      "description": "Eat next Sunday at 7am for 1 hour",
+      "date": "2026-04-19",
+      "time": "07:00",
+      "duration": 1
+    },
+    "user_correct": true,
+    "error_types": [],
+    "corrected_task": null,
+    "notes": null,
+    "timestamp": "2026-04-17T18:02:23.400599+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "go hiking with friends 2026.05.03 for 8 hours",
+    "parsed_task": {
+      "title": "Go Hiking with Friends",
+      "description": "Go hiking with friends",
+      "date": "2026-05-03",
+      "time": "21:07",
+      "duration": 8
+    },
+    "user_correct": false,
+    "error_types": [
+      "wrong_time"
+    ],
+    "corrected_task": {
+      "title": "Go Hiking with Friends",
+      "description": "Go hiking with friends",
+      "date": "2026-05-03",
+      "time": "7:00",
+      "duration": 8
+    },
+    "notes": null,
+    "timestamp": "2026-04-17T18:03:59.594531+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "next tuesday eat dinner for 1  hour",
+    "parsed_task": {
+      "title": "Eat Dinner",
+      "description": "Eat dinner for 1 hour on next Tuesday",
+      "date": "2026-04-21",
+      "time": "21:05",
+      "duration": 1
+    },
+    "user_correct": false,
+    "error_types": [
+      "wrong_time"
+    ],
+    "corrected_task": {
+      "title": "Eat Dinner",
+      "description": "Eat dinner for 1 hour on next Tuesday",
+      "date": "2026-04-21",
+      "time": "20:00",
+      "duration": 1
+    },
+    "notes": null,
+    "timestamp": "2026-04-17T18:06:33.187655+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "Go Hiking with Friends",
+    "parsed_task": {
+      "title": "Go Hiking with Friends",
+      "description": "Go Hiking with Friends",
+      "date": "2026-03-05",
+      "time": "07:00",
+      "duration": 8.0
+    },
+    "user_correct": true,
+    "error_types": [],
+    "corrected_task": null,
+    "notes": null,
+    "timestamp": "2026-04-17T18:07:38.437649+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "go hiking with friends 2026.05.03 for 8 hours",
+    "parsed_task": {
+      "title": "Go Hiking with Friends",
+      "description": "Go hiking with friends",
+      "date": "2026-05-03",
+      "time": "21:00",
+      "duration": 8
+    },
+    "user_correct": true,
+    "error_types": [],
+    "corrected_task": null,
+    "notes": null,
+    "timestamp": "2026-04-17T18:10:29.577568+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "eat next sunday at 7am for 1 hour",
+    "parsed_task": {
+      "title": "Eat",
+      "description": "Eat next Sunday at 7am for 1 hour",
+      "date": "2026-04-19",
+      "time": "07:00",
+      "duration": 1
+    },
+    "user_correct": true,
+    "error_types": [],
+    "corrected_task": null,
+    "notes": null,
+    "timestamp": "2026-04-17T18:21:59.549849+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "go hiking with friends 2026.05.03 for 8 hours",
+    "parsed_task": {
+      "title": "Go Hiking with Friends",
+      "description": "Go hiking with friends",
+      "date": "2026-05-03",
+      "time": "21:00",
+      "duration": 8
+    },
+    "user_correct": false,
+    "error_types": [
+      "missing_followup"
+    ],
+    "corrected_task": {
+      "title": "Go Hiking with Friends",
+      "description": "Go hiking with friends",
+      "date": "2026-05-03",
+      "time": "7:00",
+      "duration": 8
+    },
+    "notes": null,
+    "timestamp": "2026-04-17T18:24:49.151604+00:00",
+    "user_id": "default"
+  },
+  {
+    "input_text": "eat dinner tmrw for 1 hour",
+    "parsed_task": {
+      "title": "Eat Dinner",
+      "description": "Eat dinner tomorrow for 1 hour",
+      "date": "2026-04-18",
+      "time": "21:00",
+      "duration": 1
+    },
+    "user_correct": true,
+    "error_types": [],
+    "corrected_task": null,
+    "notes": null,
+    "timestamp": "2026-04-17T18:25:43.813555+00:00",
+    "user_id": "default"
+  }
+]
