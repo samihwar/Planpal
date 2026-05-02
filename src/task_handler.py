@@ -2,8 +2,7 @@ from datetime import datetime
 from typing import Any, Dict, Iterable, List, Mapping
 import re
 
-from feedback import build_feedback_request, ensure_user_profile, get_adaptive_rules, record_feedback
-from task_parser import parse_task, resolve_temporal_update, revise_parse
+from task_parser import normalize_user_profile, parse_task, resolve_temporal_update, revise_parse
 
 
 OPTIONAL_SCHEDULING_FIELDS = ("date", "time", "duration")
@@ -238,15 +237,9 @@ def parse_task_with_missing_info(
     user_profile: Mapping[str, Any] | None = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    effective_profile = ensure_user_profile(user_id, profile=user_profile)
-    adaptive_rules = get_adaptive_rules(user_id, profile=effective_profile)
-    initial_parse = parse_task(
-        text,
-        backend=backend,
-        user_profile=effective_profile,
-        adaptive_rules=adaptive_rules,
-        **kwargs,
-    )
+    effective_profile = normalize_user_profile(user_profile)
+    adaptive_rules = list(kwargs.pop("adaptive_rules", []))
+    initial_parse = parse_task(text, backend=backend, **kwargs)
     normalized = normalize_task(initial_parse)
     refreshed = refresh_task_state(
         normalized,
@@ -272,44 +265,7 @@ def parse_task_with_missing_info(
             followup_preference=effective_profile["followup_preference"],
         )
 
-    refreshed["feedback_request"] = build_feedback_request()
     refreshed["user_id"] = user_id
     refreshed["user_profile"] = effective_profile
     refreshed["adaptive_rules"] = adaptive_rules
-    return refreshed
-
-
-def submit_task_feedback(
-    input_text: str,
-    parsed_task: Mapping[str, Any],
-    user_correct: bool,
-    user_id: str = DEFAULT_USER_ID,
-    error_types: Iterable[str] | None = None,
-    corrected_task: Mapping[str, Any] | None = None,
-    notes: str | None = None,
-    reference_now: datetime | None = None,
-    fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
-) -> Dict[str, Any]:
-    feedback_result = record_feedback(
-        input_text=input_text,
-        parsed_task=parsed_task,
-        user_correct=user_correct,
-        user_id=user_id,
-        error_types=error_types,
-        corrected_task=corrected_task,
-        notes=notes,
-    )
-
-    current_task = corrected_task or parsed_task
-    refreshed = refresh_task_state(
-        normalize_task(current_task),
-        reference_now=reference_now,
-        fields=fields,
-        followup_preference=feedback_result["user_profile"]["followup_preference"],
-    )
-    refreshed["feedback_request"] = build_feedback_request()
-    refreshed["feedback_result"] = feedback_result
-    refreshed["user_id"] = user_id
-    refreshed["user_profile"] = feedback_result["user_profile"]
-    refreshed["adaptive_rules"] = feedback_result["adaptive_rules"]
     return refreshed
