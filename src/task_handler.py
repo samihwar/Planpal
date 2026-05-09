@@ -22,12 +22,14 @@ def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
         "date": task.get("date"),
         "time": task.get("time"),
         "duration": task.get("duration"),
+        "project": task.get("project") or "project",
+        "archived": bool(task.get("archived", False)),
     }
 
 
 def _merge_missing_fields(current_task: Dict[str, Any], revised_task: Dict[str, Any]) -> Dict[str, Any]:
     merged_task = dict(current_task)
-    for field in ("title", "description", "date", "time", "duration"):
+    for field in ("title", "description", "date", "time", "duration", "project"):
         if merged_task.get(field) in {None, ""} and revised_task.get(field) not in {None, ""}:
             merged_task[field] = revised_task[field]
     return merged_task

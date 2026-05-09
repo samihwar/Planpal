@@ -1,0 +1,20 @@
+{
+  "name": "PlanPal",
+  "short_name": "PlanPal",
+  "description": "AI-powered personal task and schedule manager",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#151515",
+  "theme_color": "#e45d48",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity"]
+}

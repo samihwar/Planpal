@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <meta name="theme-color" content="#f8f9ff">
+  <meta name="description" content="PlanPal - AI-powered task and schedule manager">
+  <title>PlanPal | Smart Productivity</title>
+  <link rel="manifest" href="/manifest.json">
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            tertiary: "#943700",
+            "surface-container-highest": "#d5e3fd",
+            "on-primary-container": "#eeefff",
+            "surface-container": "#e6eeff",
+            "secondary-fixed": "#6ffbbe",
+            "surface-dim": "#ccdbf4",
+            "outline-variant": "#c3c6d7",
+            "on-secondary": "#ffffff",
+            "primary-fixed-dim": "#b4c5ff",
+            "on-tertiary-fixed": "#360f00",
+            "surface-container-high": "#dde9ff",
+            surface: "#f8f9ff",
+            "on-primary-fixed": "#00174b",
+            "primary-fixed": "#dbe1ff",
+            "inverse-on-surface": "#ebf1ff",
+            "on-tertiary-fixed-variant": "#7d2d00",
+            "on-error-container": "#93000a",
+            outline: "#737686",
+            "on-background": "#0d1c2f",
+            error: "#ba1a1a",
+            "surface-variant": "#d5e3fd",
+            "inverse-primary": "#b4c5ff",
+            "surface-tint": "#0053db",
+            "surface-container-low": "#eff4ff",
+            "inverse-surface": "#233144",
+            "surface-container-lowest": "#ffffff",
+            "secondary-container": "#6cf8bb",
+            secondary: "#006c49",
+            "on-secondary-container": "#00714d",
+            primary: "#004ac6",
+            "on-tertiary": "#ffffff",
+            "on-primary-fixed-variant": "#003ea8",
+            "tertiary-fixed-dim": "#ffb596",
+            "on-surface": "#0d1c2f",
+            "surface-bright": "#f8f9ff",
+            "tertiary-fixed": "#ffdbcd",
+            "on-surface-variant": "#434655",
+            "on-primary": "#ffffff",
+            "on-error": "#ffffff",
+            "on-secondary-fixed": "#002113",
+            "on-tertiary-container": "#ffede6",
+            "primary-container": "#2563eb",
+            "error-container": "#ffdad6",
+            "tertiary-container": "#bc4800",
+            "on-secondary-fixed-variant": "#005236",
+            "secondary-fixed-dim": "#4edea3",
+            background: "#f8f9ff"
+          },
+          borderRadius: {
+            DEFAULT: "0.125rem",
+            lg: "0.25rem",
+            xl: "0.5rem",
+            full: "0.75rem"
+          },
+          spacing: {
+            gutter: "20px",
+            xs: "4px",
+            unit: "4px",
+            sm: "8px",
+            md: "16px",
+            margin: "24px",
+            lg: "24px",
+            xl: "32px",
+            max_width: "1280px"
+          },
+          fontFamily: {
+            display: ["Inter"],
+            "label-md": ["Inter"],
+            "headline-md": ["Inter"],
+            "label-sm": ["Inter"],
+            "headline-lg": ["Inter"],
+            "body-md": ["Inter"],
+            "body-lg": ["Inter"]
+          },
+          fontSize: {
+            display: ["36px", { lineHeight: "44px", letterSpacing: "0", fontWeight: "600" }],
+            "label-md": ["12px", { lineHeight: "16px", letterSpacing: "0", fontWeight: "500" }],
+            "headline-md": ["20px", { lineHeight: "28px", fontWeight: "500" }],
+            "label-sm": ["11px", { lineHeight: "14px", fontWeight: "600" }],
+            "headline-lg": ["24px", { lineHeight: "32px", letterSpacing: "0", fontWeight: "600" }],
+            "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+            "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }]
+          }
+        }
+      }
+    };
+  </script>
+  <style>
+    .material-symbols-outlined {
+      display: inline-block;
+      font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+      line-height: 1;
+      vertical-align: middle;
+    }
+    body { background-color: #f8f9ff; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .nav-item.active { background-color: #6cf8bb; color: #00714d; }
+    .view-section { display: none; }
+    .view-section.active { display: flex; }
+  </style>
+</head>
+<body class="font-body-md text-on-background min-h-screen">
+  <div id="loading-overlay" class="fixed inset-0 z-[60] bg-on-background/10 backdrop-blur-sm hidden items-center justify-center">
+    <div class="bg-surface-container-lowest p-xl rounded-xl shadow-lg border border-outline-variant flex flex-col items-center gap-md">
+      <div class="animate-spin text-primary">
+        <span class="material-symbols-outlined text-[48px]">sync</span>
+      </div>
+      <p id="loading-message" class="font-label-md text-on-surface-variant">Parsing your task...</p>
+    </div>
+  </div>
+
+  <div id="error-area" class="fixed top-xl right-xl z-[70] max-w-sm hidden">
+    <div class="bg-error-container text-on-error-container p-md rounded-lg shadow-md border border-error/20 flex items-start gap-sm">
+      <span class="material-symbols-outlined">report</span>
+      <p id="error-message" class="font-body-md"></p>
+    </div>
+  </div>
+
+  <div id="toast-region" class="fixed bottom-xl right-xl z-[70] flex flex-col gap-sm"></div>
+
+  <div class="flex flex-col lg:flex-row h-screen overflow-hidden">
+    <aside class="hidden lg:flex flex-col h-full py-xl px-md border-r border-outline-variant bg-surface-container-low w-64 flex-shrink-0">
+      <div class="px-md mb-xl">
+        <h1 class="font-display text-headline-md font-bold text-primary">PlanPal</h1>
+        <p class="font-body-md text-on-surface-variant opacity-70">Personal Space</p>
+      </div>
+      <nav class="flex-1 space-y-xs">
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="tasks" type="button">
+          <span class="material-symbols-outlined">checklist</span>
+          <span class="font-body-md">Goals</span>
+        </button>
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="events" type="button">
+          <span class="material-symbols-outlined">event_upcoming</span>
+          <span class="font-body-md">Events</span>
+        </button>
+        <button class="nav-item active flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="calendar" type="button">
+          <span class="material-symbols-outlined">calendar_month</span>
+          <span class="font-body-md">Calendar</span>
+        </button>
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="projects" type="button">
+          <span class="material-symbols-outlined">folder</span>
+          <span class="font-body-md">Projects</span>
+        </button>
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="archive" type="button">
+          <span class="material-symbols-outlined">archive</span>
+          <span class="font-body-md">Archive</span>
+        </button>
+      </nav>
+      <div class="mt-auto pt-md border-t border-outline-variant">
+        <button id="sync-button" class="flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all" type="button">
+          <span class="material-symbols-outlined">sync</span>
+          <span class="font-body-md">Sync</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-full overflow-hidden bg-background">
+      <header class="lg:hidden flex justify-between items-center h-16 px-margin bg-surface border-b border-outline-variant w-full">
+        <span class="font-display text-headline-lg font-semibold text-primary">PlanPal</span>
+        <button id="mobile-sync-button" class="text-on-surface-variant" type="button" aria-label="Sync tasks">
+          <span class="material-symbols-outlined">sync</span>
+        </button>
+      </header>
+
+      <div class="flex-1 overflow-y-auto hide-scrollbar p-md lg:p-xl">
+        <div class="max-w-max_width mx-auto w-full flex flex-col gap-xl">
+          <section class="flex flex-col gap-md">
+            <div class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant shadow-sm transition-all focus-within:ring-2 focus-within:ring-primary/10">
+              <div class="flex flex-col gap-sm mb-md">
+                <div class="flex items-center justify-between gap-md">
+                  <h2 class="font-label-sm text-primary uppercase">Quick Intake</h2>
+                  <span class="font-label-sm text-outline uppercase hidden lg:inline">Entry Mode</span>
+                </div>
+                <div class="grid grid-cols-2 bg-surface-container-low border border-outline-variant rounded-lg p-xs w-full sm:w-[260px]" aria-label="Entry mode">
+                  <button id="auto-mode-button" class="mode-button bg-primary text-on-primary px-md py-sm rounded-lg font-label-sm text-center" type="button" data-mode="auto">Auto</button>
+                  <button id="manual-mode-button" class="mode-button text-on-surface-variant px-md py-sm rounded-lg font-label-sm text-center" type="button" data-mode="manual">Manual</button>
+                </div>
+              </div>
+              <div class="flex flex-col gap-md lg:flex-row items-end">
+                <div class="w-full">
+                  <label class="sr-only" for="task-input">Goal or event</label>
+                  <textarea class="w-full bg-transparent border-none p-0 focus:ring-0 font-body-lg text-on-surface resize-none placeholder:text-outline" id="task-input" placeholder="Type a goal like 'send proposal tomorrow' or an event like 'Dinner at 7pm for 2 hours'..." rows="2"></textarea>
+                </div>
+                <button class="bg-primary text-on-primary px-xl py-md rounded-lg font-label-md hover:bg-primary-container transition-colors flex items-center gap-sm shrink-0" id="parse-button" type="button">
+                  <span class="material-symbols-outlined">bolt</span>
+                  <span id="parse-button-label">Parse</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="hidden bg-surface-container-high border-2 border-primary/20 p-lg rounded-xl flex-col gap-md" id="review-panel">
+              <div class="flex justify-between items-center gap-md">
+                <h3 class="font-headline-md text-on-surface">Review Parsed Details</h3>
+                <div class="text-error font-label-sm hidden" id="parsed-missing-info">Missing required info</div>
+              </div>
+              <form class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-md" id="task-review-form">
+                <div class="md:col-span-2 lg:col-span-3">
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-title-input">Title</label>
+                  <input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-title-input" type="text">
+                </div>
+                <div class="md:col-span-2 lg:col-span-3">
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-description-input">Description</label>
+                  <textarea class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-description-input" rows="2"></textarea>
+                </div>
+                <div>
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-date-input">Date</label>
+                  <input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-date-input" type="date">
+                </div>
+                <div>
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-time-input">Time</label>
+                  <input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-time-input" type="time">
+                </div>
+                <div>
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-duration-input">Duration</label>
+                  <select class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-duration-input">
+                    <option value="">No duration</option>
+                    <option value="15">15m</option>
+                    <option value="30">30m</option>
+                    <option value="45">45m</option>
+                    <option value="60">1h</option>
+                    <option value="90">1.5h</option>
+                    <option value="120">2h</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-project-input">Project</label>
+                  <select class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-project-input">
+                    <option value="project">project</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="new-project-input">Add Project</label>
+                  <input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="new-project-input" placeholder="New project name" type="text">
+                </div>
+                <div>
+                  <label class="font-label-sm text-outline uppercase mb-1 block" for="project-color-input">Project Color</label>
+                  <input class="w-full h-10 bg-surface-container-lowest border border-outline-variant rounded-lg px-sm py-xs focus:ring-1 focus:ring-primary" id="project-color-input" type="color" value="#004ac6">
+                </div>
+                <div class="md:col-span-2 lg:col-span-3 hidden flex-col gap-sm border-t border-outline-variant pt-md" id="follow-up-section">
+                  <div>
+                    <p class="font-label-sm text-outline uppercase">Fill missing details</p>
+                    <p class="text-[12px] text-on-surface-variant">Use the boxes below, or type one clarification for the missing fields.</p>
+                  </div>
+                  <div class="flex flex-col gap-2" id="follow-up-fields"></div>
+                  <div>
+                    <label class="font-label-sm text-outline uppercase mb-1 block" for="follow-up-open-text">Open clarification</label>
+                    <input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="follow-up-open-text" placeholder="Example: tomorrow at 8pm for one hour" type="text">
+                  </div>
+                </div>
+              </form>
+              <div class="flex flex-col sm:flex-row justify-end gap-md pt-md border-t border-outline-variant">
+                <button class="text-on-surface-variant font-label-md hover:underline px-md py-sm" id="discard-button" type="button">Discard</button>
+                <button class="bg-outline-variant text-on-surface-variant px-xl py-md rounded-lg font-label-md hover:bg-outline transition-colors" id="apply-details-button" type="button">Apply Details</button>
+                <button class="bg-primary text-on-primary px-xl py-md rounded-lg font-label-md hover:bg-primary-container transition-colors shadow-md" id="confirm-button" type="button">Confirm</button>
+              </div>
+            </div>
+          </section>
+
+          <div id="views-container">
+            <section class="view-section flex-col gap-md" id="view-tasks">
+              <h3 class="font-headline-md text-on-surface">Goals</h3>
+              <div class="flex flex-col gap-sm" id="tasks-list"></div>
+              <div class="hidden py-xl text-center border-2 border-dashed border-outline-variant rounded-xl" id="tasks-empty">
+                <p class="text-outline">No open goals.</p>
+              </div>
+            </section>
+
+            <section class="view-section flex-col gap-md" id="view-events">
+              <h3 class="font-headline-md text-on-surface">Events</h3>
+              <div class="flex flex-col gap-sm" id="events-list"></div>
+              <div class="hidden py-xl text-center border-2 border-dashed border-outline-variant rounded-xl" id="events-empty">
+                <p class="text-outline">No events scheduled.</p>
+              </div>
+            </section>
+
+            <section class="view-section active flex-col gap-md" id="view-calendar">
+              <div class="bg-white border border-outline-variant rounded-xl overflow-hidden">
+                <div class="p-margin border-b border-outline-variant flex flex-wrap items-center justify-between gap-md bg-white">
+                  <div class="flex items-center gap-md">
+                    <div class="flex items-center gap-sm">
+                      <button class="p-xs text-on-surface-variant hover:text-primary transition-colors bg-surface-container rounded-lg border border-outline-variant" id="calendar-prev-button" type="button" aria-label="Previous period">
+                        <span class="material-symbols-outlined text-[18px]">chevron_left</span>
+                      </button>
+                      <h3 class="font-headline-md text-on-surface min-w-[180px] text-center" id="calendar-month-label"></h3>
+                      <button class="p-xs text-on-surface-variant hover:text-primary transition-colors bg-surface-container rounded-lg border border-outline-variant" id="calendar-next-button" type="button" aria-label="Next period">
+                        <span class="material-symbols-outlined text-[18px]">chevron_right</span>
+                      </button>
+                    </div>
+                    <button class="px-md py-sm font-label-md text-on-surface-variant hover:text-primary bg-surface-container rounded-lg border border-outline-variant" id="calendar-today-button" type="button">Today</button>
+                  </div>
+                  <div class="flex bg-surface-container-low rounded-xl p-xs border border-outline-variant shadow-sm">
+                    <button class="calendar-mode-button px-xl py-xs bg-white text-primary font-label-md rounded-lg shadow-sm" id="calendar-month-mode-button" type="button" data-calendar-mode="month">Month</button>
+                    <button class="calendar-mode-button px-xl py-xs text-on-surface-variant font-label-md hover:bg-white rounded-lg transition-all" id="calendar-week-mode-button" type="button" data-calendar-mode="week">Week</button>
+                    <button class="calendar-mode-button px-xl py-xs text-on-surface-variant font-label-md hover:bg-white rounded-lg transition-all" id="calendar-schedule-mode-button" type="button" data-calendar-mode="schedule">Schedule</button>
+                  </div>
+                </div>
+                <div class="flex flex-col xl:flex-row">
+                  <div class="flex-1 overflow-auto border-r border-outline-variant">
+                    <div class="grid grid-cols-7 border-b border-outline-variant bg-surface-container-lowest" id="calendar-weekdays">
+                      <div class="p-sm text-center font-label-sm text-on-surface-variant border-r border-outline-variant">SUN</div>
+                      <div class="p-sm text-center font-label-sm text-on-surface-variant border-r border-outline-variant">MON</div>
+                      <div class="p-sm text-center font-label-sm text-on-surface-variant border-r border-outline-variant">TUE</div>
+                      <div class="p-sm text-center font-label-sm text-on-surface-variant border-r border-outline-variant">WED</div>
+                      <div class="p-sm text-center font-label-sm text-on-surface-variant border-r border-outline-variant">THU</div>
+                      <div class="p-sm text-center font-label-sm text-on-surface-variant border-r border-outline-variant">FRI</div>
+                      <div class="p-sm text-center font-label-sm text-on-surface-variant">SAT</div>
+                    </div>
+                    <div class="hidden px-md py-md overflow-x-auto hide-scrollbar items-center gap-sm bg-surface-container-lowest border-b border-outline-variant" id="calendar-week-day-scroller"></div>
+                    <div class="grid grid-cols-7 bg-outline-variant gap-[1px]" id="calendar-list"></div>
+                    <div class="hidden flex-col gap-md p-md bg-surface-container-lowest" id="calendar-week-agenda"></div>
+                    <div class="hidden flex-col gap-md p-md" id="calendar-schedule-list"></div>
+                    <div class="hidden py-xl text-center border-2 border-dashed border-outline-variant rounded-xl m-md" id="calendar-empty">
+                      <p class="text-outline">No dated goals or events this month.</p>
+                    </div>
+                  </div>
+                  <aside class="w-full xl:w-80 p-margin bg-white shrink-0 overflow-y-auto border-t xl:border-t-0 border-outline-variant">
+                    <h3 class="font-headline-md text-on-surface mb-lg">Details</h3>
+                    <div class="bg-surface-container-low rounded-xl p-md border border-outline-variant">
+                      <div class="flex items-center justify-between mb-sm">
+                        <span class="text-label-sm uppercase text-on-surface-variant font-bold">Selected Day</span>
+                        <span class="material-symbols-outlined text-primary text-sm">edit</span>
+                      </div>
+                      <p class="font-headline-md text-primary mb-xs" id="calendar-selected-date">Select a day</p>
+                      <p class="text-body-md text-on-surface-variant mb-md" id="calendar-selected-summary">No items selected</p>
+                      <div class="space-y-sm" id="calendar-selected-list"></div>
+                    </div>
+                  </aside>
+                </div>
+              </div>
+            </section>
+
+            <section class="view-section flex-col gap-md" id="view-projects">
+              <h3 class="font-headline-md text-on-surface">Projects</h3>
+              <div class="flex flex-col gap-xl" id="projects-list"></div>
+              <div class="hidden py-xl text-center border-2 border-dashed border-outline-variant rounded-xl" id="projects-empty">
+                <p class="text-outline">No projects created yet.</p>
+              </div>
+            </section>
+
+            <section class="view-section flex-col gap-md" id="view-archive">
+              <h3 class="font-headline-md text-on-surface">Archive</h3>
+              <div class="flex flex-col gap-sm" id="archive-list"></div>
+              <div class="hidden py-xl text-center border-2 border-dashed border-outline-variant rounded-xl" id="archive-empty">
+                <p class="text-outline">Archive is empty.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <nav class="lg:hidden h-16 bg-surface border-t border-outline-variant flex items-center justify-around px-md">
+        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="tasks" type="button">
+          <span class="material-symbols-outlined">checklist</span>
+          <span class="font-label-sm">Goals</span>
+        </button>
+        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="events" type="button">
+          <span class="material-symbols-outlined">event_upcoming</span>
+          <span class="font-label-sm">Events</span>
+        </button>
+        <button class="nav-item active flex flex-col items-center gap-1 text-on-surface-variant" data-view="calendar" type="button">
+          <span class="material-symbols-outlined">calendar_month</span>
+          <span class="font-label-sm">Calendar</span>
+        </button>
+        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="projects" type="button">
+          <span class="material-symbols-outlined">folder</span>
+          <span class="font-label-sm">Projects</span>
+        </button>
+        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="archive" type="button">
+          <span class="material-symbols-outlined">archive</span>
+          <span class="font-label-sm">Archive</span>
+        </button>
+      </nav>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
