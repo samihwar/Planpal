@@ -4,12 +4,17 @@
   <meta charset="utf-8">
   <meta content="width=device-width, initial-scale=1.0" name="viewport">
   <meta name="theme-color" content="#f8f9ff">
-  <meta name="description" content="PlanPal - AI-powered task and schedule manager">
-  <title>PlanPal | Smart Productivity</title>
+  <meta name="description" content="PlanPal app - AI-powered task and schedule manager">
+  <meta name="application-name" content="PlanPal">
+  <meta name="apple-mobile-web-app-title" content="PlanPal">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>PlanPal App</title>
   <link rel="manifest" href="/manifest.json">
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link rel="stylesheet" href="/style.css?v=app20">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-  <script id="tailwind-config">
+  <script id="tailwind-config" type="application/json">
     tailwind.config = {
       darkMode: "class",
       theme: {
@@ -165,6 +170,10 @@
         </button>
       </nav>
       <div class="mt-auto pt-md border-t border-outline-variant">
+        <button id="install-app-button" class="install-app-button hidden flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all" type="button">
+          <span class="material-symbols-outlined">install_desktop</span>
+          <span class="font-body-md">Install App</span>
+        </button>
         <button id="sync-button" class="flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all" type="button">
           <span class="material-symbols-outlined">sync</span>
           <span class="font-body-md">Sync</span>
@@ -175,12 +184,43 @@
     <main class="flex-1 flex flex-col h-full overflow-hidden bg-background">
       <header class="lg:hidden flex justify-between items-center h-16 px-margin bg-surface border-b border-outline-variant w-full">
         <span class="font-display text-headline-lg font-semibold text-primary">PlanPal</span>
-        <button id="mobile-sync-button" class="text-on-surface-variant" type="button" aria-label="Sync tasks">
-          <span class="material-symbols-outlined">sync</span>
-        </button>
+        <div class="flex items-center gap-sm">
+          <button id="mobile-install-button" class="install-app-button hidden text-on-surface-variant app-icon-button" type="button" aria-label="Install PlanPal app">
+            <span class="material-symbols-outlined">install_mobile</span>
+          </button>
+          <button id="mobile-sync-button" class="text-on-surface-variant app-icon-button" type="button" aria-label="Sync tasks">
+            <span class="material-symbols-outlined">sync</span>
+          </button>
+          <button id="mobile-menu-button" class="text-on-surface-variant app-icon-button" type="button" aria-label="Open menu" aria-controls="mobile-menu" aria-expanded="false">
+            <span class="material-symbols-outlined">menu</span>
+          </button>
+        </div>
       </header>
 
-      <div class="flex-1 overflow-y-auto hide-scrollbar p-md lg:p-xl">
+      <nav id="mobile-menu" class="mobile-menu hidden lg:hidden" aria-label="Mobile navigation">
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="tasks" type="button">
+          <span class="material-symbols-outlined">checklist</span>
+          <span class="font-body-md">Goals</span>
+        </button>
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="events" type="button">
+          <span class="material-symbols-outlined">event_upcoming</span>
+          <span class="font-body-md">Events</span>
+        </button>
+        <button class="nav-item active flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="calendar" type="button">
+          <span class="material-symbols-outlined">calendar_month</span>
+          <span class="font-body-md">Calendar</span>
+        </button>
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="projects" type="button">
+          <span class="material-symbols-outlined">folder</span>
+          <span class="font-body-md">Projects</span>
+        </button>
+        <button class="nav-item flex w-full items-center gap-md p-md text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-all duration-200" data-view="archive" type="button">
+          <span class="material-symbols-outlined">archive</span>
+          <span class="font-body-md">Archive</span>
+        </button>
+      </nav>
+
+      <div class="app-content flex-1 overflow-y-auto hide-scrollbar p-md lg:p-xl">
         <div class="max-w-max_width mx-auto w-full flex flex-col gap-xl">
           <section class="flex flex-col gap-md">
             <div class="bg-surface-container-lowest p-lg rounded-xl border border-outline-variant shadow-sm transition-all focus-within:ring-2 focus-within:ring-primary/10">
@@ -365,32 +405,9 @@
           </div>
         </div>
       </div>
-
-      <nav class="lg:hidden h-16 bg-surface border-t border-outline-variant flex items-center justify-around px-md">
-        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="tasks" type="button">
-          <span class="material-symbols-outlined">checklist</span>
-          <span class="font-label-sm">Goals</span>
-        </button>
-        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="events" type="button">
-          <span class="material-symbols-outlined">event_upcoming</span>
-          <span class="font-label-sm">Events</span>
-        </button>
-        <button class="nav-item active flex flex-col items-center gap-1 text-on-surface-variant" data-view="calendar" type="button">
-          <span class="material-symbols-outlined">calendar_month</span>
-          <span class="font-label-sm">Calendar</span>
-        </button>
-        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="projects" type="button">
-          <span class="material-symbols-outlined">folder</span>
-          <span class="font-label-sm">Projects</span>
-        </button>
-        <button class="nav-item flex flex-col items-center gap-1 text-on-surface-variant" data-view="archive" type="button">
-          <span class="material-symbols-outlined">archive</span>
-          <span class="font-label-sm">Archive</span>
-        </button>
-      </nav>
     </main>
   </div>
 
-  <script src="/app.js"></script>
+  <script src="/app.js?v=app20"></script>
 </body>
 </html>

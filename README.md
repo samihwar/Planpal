@@ -16,6 +16,7 @@ This version uses **Ollama LLM** (`llama3`) to parse tasks instead of `dateparse
 - Handles relative dates like "tomorrow", "next Friday", etc.
 - Uses a local LLM (`llama3`) for intelligent parsing.
 - Configurable for different timezones.
+- Installable app experience for desktop and mobile browsers through the included PWA manifest and service worker.
 
 ---
 
@@ -42,3 +43,11 @@ pip install -r requirements.txt
 ```bash
 ollama run llama3
 ```
+
+## Run the app
+
+```bash
+python main.py
+```
+
+Open `http://localhost:8000` on a PC, or open the same address from a phone on your local network. In Chrome, Edge, or supported mobile browsers, use the in-app install button or the browser install option to add PlanPal to your home screen or desktop.

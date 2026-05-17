@@ -9,9 +9,10 @@ let activeView = "calendar";
 let entryMode = "auto";
 let pendingEntryMode = "auto";
 let calendarCursor = new Date();
-let calendarMode = "month";
+let calendarMode = window.matchMedia?.("(max-width: 760px)")?.matches ? "schedule" : "month";
 let selectedCalendarDate = localDateKey(new Date());
 let projectColors = loadProjectColors();
+let deferredInstallPrompt = null;
 
 const elements = {
   taskInput: document.querySelector("#task-input"),
@@ -40,8 +41,12 @@ const elements = {
   errorArea: document.querySelector("#error-area"),
   errorMessage: document.querySelector("#error-message"),
   toastRegion: document.querySelector("#toast-region"),
+  installAppButton: document.querySelector("#install-app-button"),
+  mobileInstallButton: document.querySelector("#mobile-install-button"),
   syncButton: document.querySelector("#sync-button"),
   mobileSyncButton: document.querySelector("#mobile-sync-button"),
+  mobileMenuButton: document.querySelector("#mobile-menu-button"),
+  mobileMenu: document.querySelector("#mobile-menu"),
   calendarMonthLabel: document.querySelector("#calendar-month-label"),
   calendarPrevButton: document.querySelector("#calendar-prev-button"),
   calendarNextButton: document.querySelector("#calendar-next-button"),
@@ -75,6 +80,7 @@ const emptyElements = {
 
 document.addEventListener("DOMContentLoaded", () => {
   bindEvents();
+  setupInstallPrompt();
   loadTasks({ quiet: true });
   registerServiceWorker();
 });
@@ -93,8 +99,11 @@ function bindEvents() {
     syncProjectColorInput();
   });
   elements.projectInput.addEventListener("change", syncProjectColorInput);
+  elements.installAppButton?.addEventListener("click", handleInstallApp);
+  elements.mobileInstallButton?.addEventListener("click", handleInstallApp);
   elements.syncButton?.addEventListener("click", () => loadTasks());
   elements.mobileSyncButton?.addEventListener("click", () => loadTasks());
+  elements.mobileMenuButton?.addEventListener("click", toggleMobileMenu);
   elements.calendarPrevButton?.addEventListener("click", () => shiftCalendarMonth(-1));
   elements.calendarNextButton?.addEventListener("click", () => shiftCalendarMonth(1));
   elements.calendarTodayButton?.addEventListener("click", () => {
@@ -116,6 +125,108 @@ function bindEvents() {
   document.querySelectorAll("[data-view]").forEach((trigger) => {
     trigger.addEventListener("click", () => switchView(trigger.dataset.view));
   });
+
+  document.addEventListener("click", (event) => {
+    if (!elements.mobileMenu || !elements.mobileMenuButton || isMobileMenuClosed()) return;
+    if (elements.mobileMenu.contains(event.target) || elements.mobileMenuButton.contains(event.target)) return;
+    closeMobileMenu();
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMobileMenu();
+  });
+
+  window.matchMedia?.("(min-width: 1024px)")?.addEventListener?.("change", closeMobileMenu);
+}
+
+function toggleMobileMenu() {
+  if (isMobileMenuClosed()) {
+    openMobileMenu();
+  } else {
+    closeMobileMenu();
+  }
+}
+
+function openMobileMenu() {
+  elements.mobileMenu?.classList.remove("hidden");
+  elements.mobileMenu?.classList.add("flex");
+  elements.mobileMenuButton?.setAttribute("aria-expanded", "true");
+  elements.mobileMenuButton?.setAttribute("aria-label", "Close menu");
+}
+
+function closeMobileMenu() {
+  elements.mobileMenu?.classList.add("hidden");
+  elements.mobileMenu?.classList.remove("flex");
+  elements.mobileMenuButton?.setAttribute("aria-expanded", "false");
+  elements.mobileMenuButton?.setAttribute("aria-label", "Open menu");
+}
+
+function isMobileMenuClosed() {
+  return !elements.mobileMenu || elements.mobileMenu.classList.contains("hidden");
+}
+
+function setupInstallPrompt() {
+  updateInstallAvailability();
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    updateInstallAvailability();
+  });
+
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    updateInstallAvailability();
+    showToast("PlanPal installed");
+  });
+
+  const standaloneQuery = window.matchMedia?.("(display-mode: standalone)");
+  standaloneQuery?.addEventListener?.("change", updateInstallAvailability);
+}
+
+async function handleInstallApp() {
+  if (!deferredInstallPrompt) {
+    showInstallHelp();
+    return;
+  }
+
+  deferredInstallPrompt.prompt();
+  const choice = await deferredInstallPrompt.userChoice.catch(() => null);
+  deferredInstallPrompt = null;
+  updateInstallAvailability();
+
+  if (choice?.outcome === "accepted") {
+    showToast("Installing PlanPal...");
+  }
+}
+
+function updateInstallAvailability() {
+  const isInstalled = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+  document.body.classList.toggle("app-installed", Boolean(isInstalled));
+
+  for (const button of [elements.installAppButton, elements.mobileInstallButton]) {
+    if (!button) continue;
+    const shouldShow = !isInstalled;
+    button.classList.toggle("hidden", !shouldShow);
+    button.classList.toggle("is-available", shouldShow);
+  }
+}
+
+function showInstallHelp() {
+  if (!window.isSecureContext && !isLocalhost()) {
+    showToast("Real app install needs HTTPS. Use a hosted HTTPS URL, then open Chrome menu > Install app.");
+    return;
+  }
+
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const message = isIos
+    ? "On iPhone, tap Share, then Add to Home Screen."
+    : "Open Chrome menu, then tap Install app or Add to Home screen.";
+  showToast(message);
+}
+
+function isLocalhost() {
+  return ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 }
 
 async function handleParse() {
@@ -270,8 +381,8 @@ async function loadTasks(options = {}) {
 function renderTasks() {
   const grouped = groupTasks(tasks);
 
-  renderList(listElements.tasks, grouped.tasks, { kind: "task" });
-  renderList(listElements.events, grouped.events, { kind: "event" });
+  renderDatedList(listElements.tasks, grouped.tasks, { kind: "task" });
+  renderDatedList(listElements.events, grouped.events, { kind: "event" });
   renderCalendar(grouped.datedItems);
   renderList(listElements.archive, grouped.archive, { archivedView: true });
   renderProjects(grouped.projects);
@@ -332,6 +443,83 @@ function renderList(container, taskList, options = {}) {
   for (const task of taskList) {
     container.append(renderTaskCard(task, options));
   }
+}
+
+function renderDatedList(container, taskList, options = {}) {
+  container.innerHTML = "";
+
+  for (const [dateKey, dateTasks] of groupTasksByDate(taskList)) {
+    const section = document.createElement("section");
+    section.className = "task-date-group flex flex-col gap-sm";
+
+    const heading = document.createElement("div");
+    heading.className = "task-date-heading flex items-center justify-between gap-md";
+
+    const title = document.createElement("h4");
+    title.className = "font-label-sm text-outline uppercase";
+    title.textContent = formatDateGroupLabel(dateKey);
+
+    const count = document.createElement("span");
+    count.className = "text-[11px] bg-surface-container-high px-sm py-xs rounded text-outline uppercase font-bold";
+    count.textContent = `${dateTasks.length} ${dateTasks.length === 1 ? "item" : "items"}`;
+
+    const list = document.createElement("div");
+    list.className = "flex flex-col gap-sm";
+
+    for (const task of sortTasksByDateTime(dateTasks)) {
+      list.append(renderTaskCard(task, options));
+    }
+
+    heading.append(title, count);
+    section.append(heading, list);
+    container.append(section);
+  }
+}
+
+function groupTasksByDate(taskList) {
+  const groups = new Map();
+
+  for (const task of taskList) {
+    const dateKey = task.date || "no-date";
+    if (!groups.has(dateKey)) {
+      groups.set(dateKey, []);
+    }
+    groups.get(dateKey).push(task);
+  }
+
+  return [...groups.entries()].sort(([dateA], [dateB]) => {
+    if (dateA === "no-date") return 1;
+    if (dateB === "no-date") return -1;
+    return dateA.localeCompare(dateB);
+  });
+}
+
+function sortTasksByDateTime(taskList) {
+  return [...taskList].sort((a, b) => {
+    const timeCompare = (a.time || "").localeCompare(b.time || "");
+    if (timeCompare !== 0) return timeCompare;
+    return (a.title || "").localeCompare(b.title || "");
+  });
+}
+
+function formatDateGroupLabel(dateKey) {
+  if (dateKey === "no-date") return "No Date";
+
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) return dateKey;
+
+  const today = new Date();
+  const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+  const dateLabel = date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+
+  if (dateKey === localDateKey(today)) return `Today · ${dateLabel}`;
+  if (dateKey === localDateKey(tomorrow)) return `Tomorrow · ${dateLabel}`;
+  return dateLabel;
 }
 
 function renderProjects(projectGroups) {
@@ -419,14 +607,16 @@ function renderCalendar(calendarGroups) {
     selectedCalendarDate = localDateKey(calendarCursor);
   }
 
+  if (isWeek) {
+    renderWeekTimeGrid(visibleDates, calendarGroups, today);
+    renderSelectedDayDetails(calendarGroups.get(selectedCalendarDate) || []);
+    toggleEmpty(emptyElements.calendar, false);
+    return;
+  }
+
   for (const visibleDate of visibleDates) {
     const isOutsideMonth = calendarMode === "month" && visibleDate.getMonth() !== month;
     listElements.calendar.append(renderCalendarDay(visibleDate, calendarGroups, today, { isOutsideMonth }));
-  }
-
-  if (isWeek) {
-    renderWeekDayScroller(visibleDates, calendarGroups);
-    renderWeekAgenda(calendarGroups.get(selectedCalendarDate) || []);
   }
 
   const visibleKeys = new Set(visibleDates.map(localDateKey));
@@ -438,6 +628,7 @@ function setCalendarModeClasses(mode) {
   const weekdays = document.querySelector("#calendar-weekdays");
 
   if (mode === "schedule") {
+    listElements.calendar.style.gridTemplateColumns = "";
     listElements.calendar.className = "hidden";
     listElements.calendarWeekDayScroller.className = "hidden";
     listElements.calendarWeekAgenda.className = "hidden";
@@ -449,15 +640,16 @@ function setCalendarModeClasses(mode) {
   listElements.calendarSchedule.className = "hidden";
 
   if (mode === "week") {
-    listElements.calendar.className = "hidden";
-    listElements.calendarWeekDayScroller.className = "px-md py-md overflow-x-auto hide-scrollbar flex md:grid md:grid-cols-7 items-center gap-sm bg-surface-container-lowest border-b border-outline-variant";
-    listElements.calendarWeekAgenda.className = "flex flex-col gap-md p-md bg-surface-container-lowest";
+    listElements.calendar.className = "week-time-grid bg-outline-variant";
+    listElements.calendarWeekDayScroller.className = "hidden";
+    listElements.calendarWeekAgenda.className = "hidden";
     if (weekdays) {
       weekdays.className = "hidden";
     }
     return;
   }
 
+  listElements.calendar.style.gridTemplateColumns = "";
   listElements.calendar.className = "grid grid-cols-7 bg-outline-variant gap-[1px]";
   listElements.calendarWeekDayScroller.className = "hidden";
   listElements.calendarWeekAgenda.className = "hidden";
@@ -648,6 +840,127 @@ function renderCalendarSchedule(calendarGroups) {
   }
 }
 
+function renderWeekTimeGrid(visibleDates, calendarGroups, today) {
+  const visibleKeys = visibleDates.map(localDateKey);
+  const weekItems = visibleKeys.flatMap((dateKey) => calendarGroups.get(dateKey) || []);
+  const { startHour, endHour } = getWeekHourRange(weekItems);
+
+  listElements.calendar.style.gridTemplateColumns = "52px repeat(7, minmax(112px, 1fr))";
+
+  const corner = document.createElement("div");
+  corner.className = "week-time-corner bg-surface-container-lowest border-r border-b border-outline-variant";
+  listElements.calendar.append(corner);
+
+  for (const date of visibleDates) {
+    const dateKey = localDateKey(date);
+    const dayHeader = document.createElement("button");
+    dayHeader.className = "week-time-day-header bg-surface-container-lowest border-b border-outline-variant p-sm text-left";
+    dayHeader.type = "button";
+    dayHeader.addEventListener("click", () => {
+      selectedCalendarDate = dateKey;
+      calendarCursor = date;
+      renderTasks();
+    });
+    if (dateKey === today) dayHeader.classList.add("bg-primary-fixed");
+    if (dateKey === selectedCalendarDate) dayHeader.classList.add("outline", "outline-2", "outline-primary");
+
+    const weekday = document.createElement("div");
+    weekday.className = "font-label-sm text-outline uppercase";
+    weekday.textContent = date.toLocaleDateString(undefined, { weekday: "short" });
+
+    const day = document.createElement("div");
+    day.className = "font-body-md font-bold text-on-surface";
+    day.textContent = date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+    dayHeader.append(weekday, day);
+    listElements.calendar.append(dayHeader);
+  }
+
+  appendWeekTimeRow("All day", visibleDates, calendarGroups, (item) => !item.time);
+
+  for (let hour = startHour; hour <= endHour; hour += 1) {
+    appendWeekTimeRow(formatHourLabel(hour), visibleDates, calendarGroups, (item) => timeHour(item.time) === hour);
+  }
+}
+
+function appendWeekTimeRow(label, visibleDates, calendarGroups, itemFilter) {
+  const timeLabel = document.createElement("div");
+  timeLabel.className = "week-time-label bg-surface-container-lowest border-r border-b border-outline-variant p-xs text-label-md text-outline";
+  timeLabel.textContent = label;
+  listElements.calendar.append(timeLabel);
+
+  for (const date of visibleDates) {
+    const dateKey = localDateKey(date);
+    const cellItems = (calendarGroups.get(dateKey) || []).filter(itemFilter).sort(compareWeekGridItems);
+    const cell = document.createElement("button");
+    cell.className = "week-time-cell bg-white border-b border-outline-variant p-xs text-left";
+    cell.type = "button";
+    cell.addEventListener("click", () => {
+      selectedCalendarDate = dateKey;
+      calendarCursor = date;
+      renderTasks();
+    });
+
+    for (const item of cellItems) {
+      cell.append(renderWeekTimeGridItem(item));
+    }
+
+    listElements.calendar.append(cell);
+  }
+}
+
+function renderWeekTimeGridItem(item) {
+  const button = document.createElement("button");
+  button.className = "week-time-item text-left rounded px-xs py-xs shadow-sm";
+  button.type = "button";
+  button.style.backgroundColor = isEvent(item) ? projectColor(item.project) : projectTint(item.project);
+  button.style.color = isEvent(item) ? "#ffffff" : projectColor(item.project);
+  button.addEventListener("click", (clickEvent) => {
+    clickEvent.stopPropagation();
+    openEditTask(item);
+  });
+
+  const meta = document.createElement("div");
+  meta.className = "week-time-item-meta font-label-sm";
+  meta.textContent = formatWeekItemMeta(item);
+
+  const title = document.createElement("div");
+  title.className = "week-time-item-title font-label-md";
+  title.textContent = item.title || (isEvent(item) ? "Untitled event" : "Untitled goal");
+
+  button.append(meta, title);
+  return button;
+}
+
+function getWeekHourRange(items) {
+  const hours = items.map((item) => timeHour(item.time)).filter((hour) => hour != null);
+  if (hours.length === 0) return { startHour: 8, endHour: 18 };
+
+  const minHour = Math.min(...hours);
+  const maxHour = Math.max(...hours);
+  return {
+    startHour: Math.max(0, Math.min(8, minHour)),
+    endHour: Math.min(23, Math.max(18, maxHour)),
+  };
+}
+
+function timeHour(time) {
+  if (!time) return null;
+  const [hour] = String(time).split(":").map(Number);
+  return Number.isFinite(hour) ? hour : null;
+}
+
+function formatHourLabel(hour) {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+function compareWeekGridItems(a, b) {
+  const timeCompare = (a.time || "").localeCompare(b.time || "");
+  if (timeCompare !== 0) return timeCompare;
+  if (isEvent(a) !== isEvent(b)) return isEvent(a) ? -1 : 1;
+  return (a.title || "").localeCompare(b.title || "");
+}
+
 function renderCalendarDay(date, calendarGroups, today, options = {}) {
   const dateKey = localDateKey(date);
   const items = (calendarGroups.get(dateKey) || []).slice();
@@ -672,7 +985,7 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
   const dayNumber = document.createElement("span");
   dayNumber.className = "font-label-md text-on-surface";
   dayNumber.textContent = calendarMode === "week"
-    ? date.toLocaleDateString(undefined, { day: "numeric", month: "short" })
+    ? date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
     : String(date.getDate());
 
   const count = document.createElement("span");
@@ -681,6 +994,31 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
 
   header.append(dayNumber, count);
   cell.append(header);
+
+  if (calendarMode === "month" && isPhoneLayout()) {
+    renderCompactMonthItems(cell, [...dayEvents, ...dayTasks]);
+    return cell;
+  }
+
+  if (calendarMode === "week") {
+    const weekItems = sortTasksForWeek(items);
+    const weekList = document.createElement("div");
+    weekList.className = "week-day-items flex flex-col gap-xs";
+
+    if (weekItems.length === 0) {
+      const empty = document.createElement("span");
+      empty.className = "week-empty text-[11px] text-outline";
+      empty.textContent = "No items";
+      weekList.append(empty);
+    }
+
+    for (const item of weekItems) {
+      weekList.append(renderWeekCalendarItem(item));
+    }
+
+    cell.append(weekList);
+    return cell;
+  }
 
   if (dayTasks.length > 0) {
     const taskList = document.createElement("div");
@@ -744,6 +1082,82 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
   }
   cell.append(eventStack);
   return cell;
+}
+
+function renderCompactMonthItems(cell, items) {
+  if (items.length === 0) return;
+
+  const indicatorList = document.createElement("div");
+  indicatorList.className = "month-compact-items";
+
+  for (const item of sortTasksForWeek(items).slice(0, 3)) {
+    const indicator = document.createElement("div");
+    indicator.className = "month-compact-item";
+    indicator.style.backgroundColor = isEvent(item) ? projectColor(item.project) : projectTint(item.project);
+    indicator.style.color = isEvent(item) ? "#ffffff" : projectColor(item.project);
+    indicator.textContent = [item.time, item.title || (isEvent(item) ? "Untitled event" : "Untitled goal")]
+      .filter(Boolean)
+      .join(" ");
+    indicator.title = indicator.textContent;
+    indicatorList.append(indicator);
+  }
+
+  if (items.length > 3) {
+    const more = document.createElement("span");
+    more.className = "month-compact-more";
+    more.textContent = `+${items.length - 3}`;
+    indicatorList.append(more);
+  }
+
+  cell.append(indicatorList);
+}
+
+function isPhoneLayout() {
+  return window.matchMedia?.("(max-width: 760px)")?.matches;
+}
+
+function sortTasksForWeek(taskList) {
+  return [...taskList].sort((a, b) => {
+    const aHasTime = Boolean(a.time);
+    const bHasTime = Boolean(b.time);
+    if (aHasTime !== bHasTime) return aHasTime ? -1 : 1;
+
+    const timeCompare = (a.time || "").localeCompare(b.time || "");
+    if (timeCompare !== 0) return timeCompare;
+
+    if (isEvent(a) !== isEvent(b)) return isEvent(a) ? -1 : 1;
+    return (a.title || "").localeCompare(b.title || "");
+  });
+}
+
+function renderWeekCalendarItem(item) {
+  const button = document.createElement("button");
+  button.className = "week-calendar-item text-left rounded px-xs py-xs shadow-sm overflow-hidden";
+  button.type = "button";
+  button.style.backgroundColor = isEvent(item) ? projectColor(item.project) : projectTint(item.project);
+  button.style.color = isEvent(item) ? "#ffffff" : projectColor(item.project);
+  button.addEventListener("click", (clickEvent) => {
+    clickEvent.stopPropagation();
+    openEditTask(item);
+  });
+
+  const meta = document.createElement("div");
+  meta.className = "week-calendar-item-meta font-label-sm";
+  meta.textContent = formatWeekItemMeta(item);
+
+  const title = document.createElement("div");
+  title.className = "week-calendar-item-title font-label-md";
+  title.textContent = item.title || (isEvent(item) ? "Untitled event" : "Untitled goal");
+
+  button.append(meta, title);
+  return button;
+}
+
+function formatWeekItemMeta(item) {
+  const parts = [item.time || "Any time"];
+  if (isEvent(item) && item.duration) parts.push(formatDuration(item.duration));
+  parts.push(isEvent(item) ? "Event" : "Goal");
+  return parts.join(" · ");
 }
 
 function renderSelectedDayDetails(items) {
@@ -1290,6 +1704,7 @@ function updateMissingInfo(missingInfo) {
 
 function switchView(viewName) {
   activeView = viewName;
+  closeMobileMenu();
 
   document.querySelectorAll(".nav-item").forEach((item) => {
     item.classList.toggle("active", item.dataset.view === viewName);

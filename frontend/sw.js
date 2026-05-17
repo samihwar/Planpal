@@ -1,5 +1,14 @@
-const CACHE_NAME = "planpal-v2";
-const STATIC_ASSETS = ["/", "/index.html", "/style.css", "/app.js", "/manifest.json", "/icon.svg"];
+const CACHE_NAME = "planpal-app-v10";
+const STATIC_ASSETS = [
+  "/",
+  "/index.html",
+  "/style.css?v=app9",
+  "/app.js?v=app9",
+  "/manifest.json",
+  "/icon.svg",
+  "/icon-192.png",
+  "/icon-512.png",
+];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -20,7 +29,12 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
 
   if (requestUrl.pathname.startsWith("/api/")) {
-    event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request).catch(() => caches.match("/index.html")));
     return;
   }
 

@@ -148,5 +148,152 @@
     "missing_info": [],
     "follow_up_questions": [],
     "created_at": "2026-05-08T12:00:00+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "test 02",
+    "description": "test 02",
+    "date": "2026-05-09",
+    "time": "19:01",
+    "duration": null,
+    "completed": false,
+    "archived": false,
+    "project": "PlanPal",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "bd98ae35-06ca-462f-a14e-72d090fdfd6e",
+    "created_at": "2026-05-09T15:01:36.516367+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Send Proposal for Samih",
+    "description": "Send proposal for Samih at 11 pm for tomorrow the activity is study",
+    "date": "2026-05-10",
+    "time": "23:00",
+    "duration": 1,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "bc3bd90e-bf11-4a7e-8d32-ffdfaa1e274a",
+    "created_at": "2026-05-09T15:18:19.789641+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Church",
+    "description": "Church",
+    "date": "2026-05-10",
+    "time": "09:00",
+    "duration": 1.5,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "ecb8e75f-1145-47f2-a87e-6e2f5248b539",
+    "created_at": "2026-05-09T19:03:38.417798+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "test 3",
+    "description": "test 3",
+    "date": "2026-05-09",
+    "time": "22:11",
+    "duration": null,
+    "completed": false,
+    "archived": false,
+    "project": "School",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "b99b3a74-0171-48f3-ad33-30b0d6111abe",
+    "created_at": "2026-05-09T19:11:20.106688+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Therapy",
+    "description": "Therapy tomorrow at 8:00 for 45 minutes",
+    "date": "2026-05-12",
+    "time": "08:00",
+    "duration": 0.75,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "a67b964e-18cb-4122-941e-fc0d1440644c",
+    "created_at": "2026-05-11T18:46:00.511674+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Buy Milk",
+    "description": "Buy milk after university finishes at 18:00 tomorrow.",
+    "date": "2026-05-12",
+    "time": "18:00",
+    "duration": null,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "c4d88936-077e-4457-8059-f8198bba0bb4",
+    "created_at": "2026-05-11T19:04:39.791768+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Buy Milk",
+    "description": "Buy milk tomorrow",
+    "date": "2026-05-12",
+    "time": null,
+    "duration": null,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [
+      "time"
+    ],
+    "follow_up_questions": [
+      {
+        "field": "time"
+      }
+    ],
+    "id": "85bd2fe0-a464-4bd2-845b-8f95588d0de8",
+    "created_at": "2026-05-11T19:05:51.307715+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Buy Milk",
+    "description": "Buy milk tomorrow",
+    "date": "2026-05-12",
+    "time": null,
+    "duration": null,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [
+      "time"
+    ],
+    "follow_up_questions": [
+      {
+        "field": "time"
+      }
+    ],
+    "id": "df8d764c-f373-4f7c-9d67-93df8bcd6051",
+    "created_at": "2026-05-11T19:07:46.072971+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "London Trip",
+    "description": "Travelling to London, checking in to Airbnb, grabbing lunch, buying shoes, and going to a salon.",
+    "date": "2026-05-18",
+    "time": "12:00",
+    "duration": null,
+    "completed": true,
+    "archived": true,
+    "project": "project",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "d0b0b1a3-05f5-4f67-8980-e18cfb9bcbe1",
+    "created_at": "2026-05-17T13:57:57.611205+00:00"
   }
 ]
