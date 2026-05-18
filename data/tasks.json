@@ -226,63 +226,6 @@
   },
   {
     "user_id": "default",
-    "title": "Buy Milk",
-    "description": "Buy milk after university finishes at 18:00 tomorrow.",
-    "date": "2026-05-12",
-    "time": "18:00",
-    "duration": null,
-    "completed": false,
-    "archived": false,
-    "project": "project",
-    "missing_info": [],
-    "follow_up_questions": [],
-    "id": "c4d88936-077e-4457-8059-f8198bba0bb4",
-    "created_at": "2026-05-11T19:04:39.791768+00:00"
-  },
-  {
-    "user_id": "default",
-    "title": "Buy Milk",
-    "description": "Buy milk tomorrow",
-    "date": "2026-05-12",
-    "time": null,
-    "duration": null,
-    "completed": false,
-    "archived": false,
-    "project": "project",
-    "missing_info": [
-      "time"
-    ],
-    "follow_up_questions": [
-      {
-        "field": "time"
-      }
-    ],
-    "id": "85bd2fe0-a464-4bd2-845b-8f95588d0de8",
-    "created_at": "2026-05-11T19:05:51.307715+00:00"
-  },
-  {
-    "user_id": "default",
-    "title": "Buy Milk",
-    "description": "Buy milk tomorrow",
-    "date": "2026-05-12",
-    "time": null,
-    "duration": null,
-    "completed": false,
-    "archived": false,
-    "project": "project",
-    "missing_info": [
-      "time"
-    ],
-    "follow_up_questions": [
-      {
-        "field": "time"
-      }
-    ],
-    "id": "df8d764c-f373-4f7c-9d67-93df8bcd6051",
-    "created_at": "2026-05-11T19:07:46.072971+00:00"
-  },
-  {
-    "user_id": "default",
     "title": "London Trip",
     "description": "Travelling to London, checking in to Airbnb, grabbing lunch, buying shoes, and going to a salon.",
     "date": "2026-05-18",
@@ -295,5 +238,43 @@
     "follow_up_questions": [],
     "id": "d0b0b1a3-05f5-4f67-8980-e18cfb9bcbe1",
     "created_at": "2026-05-17T13:57:57.611205+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Make Cancelation to Netflix",
+    "description": "Make cancelation to Netflix exactly next week",
+    "date": "2026-05-25",
+    "time": null,
+    "duration": null,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [
+      "time"
+    ],
+    "follow_up_questions": [
+      {
+        "field": "time"
+      }
+    ],
+    "id": "ad15b3a9-7c82-471c-885f-8a55a522f436",
+    "created_at": "2026-05-18T16:05:36.639784+00:00"
+  },
+  {
+    "user_id": "default",
+    "title": "Make Cancelation to Netflix",
+    "description": "Make cancelation to Netflix exactly at 19.05.2026",
+    "date": "2026-05-19",
+    "time": "22:00",
+    "time_mode": "timed",
+    "duration": 19.666666666666668,
+    "all_day": false,
+    "completed": false,
+    "archived": false,
+    "project": "project",
+    "missing_info": [],
+    "follow_up_questions": [],
+    "id": "8c3e0ac5-fa4c-4a2c-bc96-751bf546dfb2",
+    "created_at": "2026-05-18T16:53:29.777249+00:00"
   }
 ]

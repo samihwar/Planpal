@@ -12,6 +12,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>PlanPal App</title>
   <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="stylesheet" href="/style.css?v=app20">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
   <script id="tailwind-config" type="application/json">
@@ -264,14 +267,65 @@
                   <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-date-input">Date</label>
                   <input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-date-input" type="date">
                 </div>
-                <div>
+                <div class="flex flex-col gap-sm">
                   <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-time-input">Time</label>
-                  <input class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-time-input" type="time">
+                  <div class="review-picker" id="time-picker">
+                    <div class="flex items-center justify-between gap-md">
+                      <div class="segmented-control" aria-label="Time period">
+                        <button class="picker-chip" data-time-period="AM" type="button">AM</button>
+                        <button class="picker-chip" data-time-period="PM" type="button">PM</button>
+                      </div>
+                      <span class="picker-readout" id="time-picker-readout">Select time</span>
+                    </div>
+                    <div class="time-hour-grid" aria-label="Common times">
+                      <button class="picker-chip" data-time-hour="08" type="button">8</button>
+                      <button class="picker-chip" data-time-hour="09" type="button">9</button>
+                      <button class="picker-chip" data-time-hour="10" type="button">10</button>
+                      <button class="picker-chip" data-time-hour="11" type="button">11</button>
+                    </div>
+                    <div class="minute-chip-row" aria-label="Minutes">
+                      <button class="picker-chip" data-time-minute="00" type="button">:00</button>
+                      <button class="picker-chip" data-time-minute="15" type="button">:15</button>
+                      <button class="picker-chip" data-time-minute="30" type="button">:30</button>
+                      <button class="picker-chip" data-time-minute="45" type="button">:45</button>
+                    </div>
+                    <div class="time-special-row" aria-label="Time options">
+                      <button class="picker-chip" data-time-special="no_time" type="button">No time</button>
+                    </div>
+                  </div>
+                  <select class="sr-only" id="parsed-time-input" aria-label="Time">
+                    <option value="">Select time</option>
+                    <option value="__no_time__">No time</option>
+                  </select>
                 </div>
-                <div>
+                <div class="flex flex-col gap-sm">
                   <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-duration-input">Duration</label>
-                  <select class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-duration-input">
+                  <div class="review-picker" id="duration-picker">
+                    <div class="duration-special-row" aria-label="Scheduling options">
+                      <button class="picker-chip" data-duration-value="" type="button">No duration</button>
+                      <button class="picker-chip" data-duration-value="all_day" type="button">All day</button>
+                    </div>
+                    <div class="duration-chip-row" aria-label="Duration">
+                      <button class="picker-chip" data-duration-value="15" type="button">15m</button>
+                      <button class="picker-chip" data-duration-value="30" type="button">30m</button>
+                      <button class="picker-chip" data-duration-value="45" type="button">45m</button>
+                      <button class="picker-chip" data-duration-value="60" type="button">1h</button>
+                      <button class="picker-chip" data-duration-value="90" type="button">1.5h</button>
+                      <button class="picker-chip" data-duration-value="120" type="button">2h</button>
+                      <button class="picker-chip" data-duration-value="240" type="button">4h</button>
+                      <button class="picker-chip" data-duration-value="480" type="button">8h</button>
+                    </div>
+                    <div class="duration-slider-row">
+                      <div class="flex items-center justify-between gap-sm">
+                        <span class="picker-kicker">Custom</span>
+                        <span class="picker-value" id="duration-picker-readout">No duration</span>
+                      </div>
+                      <input class="duration-slider" id="duration-slider-input" max="1440" min="5" step="5" type="range" value="45">
+                    </div>
+                  </div>
+                  <select class="sr-only" id="parsed-duration-input" aria-label="Duration">
                     <option value="">No duration</option>
+                    <option value="all_day">All day</option>
                     <option value="15">15m</option>
                     <option value="30">30m</option>
                     <option value="45">45m</option>

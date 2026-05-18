@@ -7,6 +7,7 @@ from task_parser import normalize_user_profile, parse_task, resolve_temporal_upd
 
 OPTIONAL_SCHEDULING_FIELDS = ("date", "time", "duration")
 DEFAULT_USER_ID = "default"
+NO_TIME_ANSWERS = {"__no_time__", "no time", "none", "no", "notime"}
 SIMPLE_HOUR_PATTERN = re.compile(r"^\s*(?P<hour>\d{1,2})\s*$")
 SIMPLE_TIME_PATTERN = re.compile(r"^\s*(?P<hour>\d{1,2}):(?P<minute>\d{1,2})\s*$")
 AM_PM_TIME_PATTERN = re.compile(
@@ -21,7 +22,9 @@ def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
         "description": task.get("description") or "",
         "date": task.get("date"),
         "time": task.get("time"),
+        "time_mode": task.get("time_mode"),
         "duration": task.get("duration"),
+        "all_day": bool(task.get("all_day", False)),
         "project": task.get("project") or "project",
         "archived": bool(task.get("archived", False)),
     }
@@ -45,7 +48,15 @@ def find_missing_info(
     task: Dict[str, Any],
     fields: Iterable[str] = OPTIONAL_SCHEDULING_FIELDS,
 ) -> List[str]:
-    return [field for field in fields if task.get(field) is None]
+    missing = []
+    for field in fields:
+        if field == "time" and task.get("time_mode") == "none":
+            continue
+        if field == "duration" and task.get("all_day"):
+            continue
+        if task.get(field) is None:
+            missing.append(field)
+    return missing
 
 
 def build_follow_up_questions(
@@ -155,12 +166,24 @@ def apply_follow_up_answer(
 
     if field in {"date", "time"}:
         if field == "time":
+            if isinstance(answer, str) and answer.strip().lower() in NO_TIME_ANSWERS:
+                updated = dict(task)
+                updated["time"] = None
+                updated["time_mode"] = "none"
+                return refresh_task_state(
+                    updated,
+                    reference_now=reference_now,
+                    fields=fields,
+                    followup_preference=followup_preference,
+                )
+
             normalized_time = _normalize_simple_time_answer(answer)
             if normalized_time is not None:
-                return update_task_field(
-                    task,
-                    field,
-                    normalized_time,
+                updated = dict(task)
+                updated["time"] = normalized_time
+                updated["time_mode"] = "timed"
+                return refresh_task_state(
+                    updated,
                     reference_now=reference_now,
                     fields=fields,
                     followup_preference=followup_preference,
@@ -173,6 +196,16 @@ def apply_follow_up_answer(
             updates["date"] = resolved["date"]
         if field == "time" and "time" in resolved:
             updates["time"] = resolved["time"]
+            updates["time_mode"] = "timed"
+        if "time_mode" in updates:
+            updated = dict(task)
+            updated.update(updates)
+            return refresh_task_state(
+                updated,
+                reference_now=reference_now,
+                fields=fields,
+                followup_preference=followup_preference,
+            )
         return update_task_fields(
             task,
             updates,

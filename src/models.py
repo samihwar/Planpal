@@ -30,7 +30,9 @@ class UpdateTaskRequest(BaseModel):
     description: str | None = None
     date: str | None = None
     time: str | None = None
+    time_mode: str | None = None
     duration: float | None = None
+    all_day: bool | None = None
     completed: bool | None = None
     archived: bool | None = None
     project: str | None = None

@@ -88,6 +88,130 @@ textarea {
   border: 0;
 }
 
+.review-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+}
+
+.segmented-control,
+.duration-special-row,
+.duration-chip-row,
+.minute-chip-row,
+.time-special-row {
+  display: flex;
+  gap: 8px;
+}
+
+.segmented-control {
+  padding: 3px;
+  background: var(--app-muted-surface);
+  border: 1px solid rgba(195, 198, 215, 0.7);
+  border-radius: 999px;
+}
+
+.time-hour-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.duration-special-row,
+.duration-chip-row,
+.time-special-row {
+  flex-wrap: wrap;
+}
+
+.time-special-row {
+  padding-top: 6px;
+  border-top: 1px solid rgba(195, 198, 215, 0.7);
+}
+
+.duration-slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(195, 198, 215, 0.7);
+}
+
+.picker-chip[hidden],
+.duration-slider-row[hidden] {
+  display: none !important;
+}
+
+.picker-chip {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.time-hour-grid .picker-chip {
+  border-radius: 6px;
+}
+
+.picker-chip:hover:not(:disabled) {
+  border-color: var(--app-primary);
+  color: var(--app-primary);
+}
+
+.picker-chip.is-active {
+  border-color: var(--app-primary);
+  background: rgba(0, 74, 198, 0.08);
+  color: var(--app-primary);
+  box-shadow: 0 1px 4px rgba(0, 74, 198, 0.12);
+}
+
+.segmented-control .picker-chip.is-active {
+  background: var(--app-primary);
+  color: #ffffff;
+}
+
+.picker-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.picker-readout {
+  color: var(--app-primary);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.picker-kicker {
+  color: var(--app-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.picker-value {
+  color: var(--app-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.duration-slider {
+  width: 100%;
+  height: 6px;
+  accent-color: var(--app-primary);
+  cursor: pointer;
+}
+
 .hidden {
   display: none !important;
 }

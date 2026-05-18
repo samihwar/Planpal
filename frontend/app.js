@@ -2,6 +2,8 @@ const API_BASE = window.location.origin;
 const currentUserId = "default";
 const PROJECT_COLORS_KEY = "planpal-project-colors";
 const DEFAULT_PROJECT_COLOR = "#004ac6";
+const NO_TIME_VALUE = "__no_time__";
+const ALL_DAY_DURATION_VALUE = "all_day";
 
 let tasks = [];
 let pendingTask = null;
@@ -26,6 +28,9 @@ const elements = {
   dateInput: document.querySelector("#parsed-date-input"),
   timeInput: document.querySelector("#parsed-time-input"),
   durationInput: document.querySelector("#parsed-duration-input"),
+  durationSlider: document.querySelector("#duration-slider-input"),
+  timePickerReadout: document.querySelector("#time-picker-readout"),
+  durationPickerReadout: document.querySelector("#duration-picker-readout"),
   projectInput: document.querySelector("#parsed-project-input"),
   newProjectInput: document.querySelector("#new-project-input"),
   projectColorInput: document.querySelector("#project-color-input"),
@@ -79,6 +84,7 @@ const emptyElements = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  initializeTimeOptions();
   bindEvents();
   setupInstallPrompt();
   loadTasks({ quiet: true });
@@ -92,6 +98,18 @@ function bindEvents() {
   elements.applyDetailsButton.addEventListener("click", handleApplyDetails);
   elements.confirmButton.addEventListener("click", handleConfirm);
   elements.discardButton.addEventListener("click", resetPendingTask);
+  elements.timeInput.addEventListener("change", updateDurationOptionsForTime);
+  elements.durationInput.addEventListener("change", () => {
+    if (elements.durationInput.value === ALL_DAY_DURATION_VALUE) {
+      elements.timeInput.value = NO_TIME_VALUE;
+      updateDurationOptionsForTime();
+    }
+    renderReviewPickers();
+  });
+  elements.reviewPanel.addEventListener("click", handleReviewPickerClick);
+  elements.durationSlider?.addEventListener("input", () => {
+    setDurationValue(elements.durationSlider.value);
+  });
   elements.newProjectInput.addEventListener("input", () => {
     if (elements.newProjectInput.value.trim()) {
       elements.projectInput.value = "";
@@ -435,7 +453,7 @@ function groupTasks(taskList) {
 }
 
 function isEvent(task) {
-  return task.duration != null && Number(task.duration) > 0;
+  return Boolean(task.all_day) || (task.duration != null && Number(task.duration) > 0);
 }
 
 function renderList(container, taskList, options = {}) {
@@ -751,7 +769,7 @@ function renderMobileEventCard(event) {
   const label = document.createElement("span");
   label.className = "text-label-md font-bold uppercase";
   label.style.color = projectColor(event.project);
-  label.textContent = `Event${event.time ? ` • ${event.time}` : ""}${event.duration ? ` • ${formatDuration(event.duration)}` : ""}`;
+  label.textContent = ["Event", event.time, event.all_day ? "All day" : formatDuration(event.duration)].filter(Boolean).join(" - ");
 
   const title = document.createElement("h3");
   title.className = "font-headline-md text-on-surface font-semibold mt-xs";
@@ -1052,7 +1070,9 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
   const eventLimit = calendarMode === "week" ? 10 : 4;
   for (const event of dayEvents.slice(0, eventLimit)) {
     const eventButton = document.createElement("button");
-    const durationMinutes = Math.max(20, Math.min(calendarMode === "week" ? 150 : 90, Math.round(Number(event.duration) * 28)));
+    const durationMinutes = event.all_day
+      ? 28
+      : Math.max(20, Math.min(calendarMode === "week" ? 150 : 90, Math.round(Number(event.duration) * 28)));
     eventButton.className = "text-left rounded px-xs py-xs shadow-sm overflow-hidden";
     eventButton.style.backgroundColor = projectColor(event.project);
     eventButton.style.color = "#ffffff";
@@ -1069,7 +1089,7 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
 
     const meta = document.createElement("div");
     meta.className = "text-[10px] opacity-90";
-    meta.textContent = [event.time, formatDuration(event.duration)].filter(Boolean).join(" · ");
+    meta.textContent = [event.time, event.all_day ? "All day" : formatDuration(event.duration)].filter(Boolean).join(" - ");
 
     eventButton.append(title, meta);
     eventStack.append(eventButton);
@@ -1155,9 +1175,15 @@ function renderWeekCalendarItem(item) {
 
 function formatWeekItemMeta(item) {
   const parts = [item.time || "Any time"];
-  if (isEvent(item) && item.duration) parts.push(formatDuration(item.duration));
+  if (isEvent(item)) {
+    if (item.all_day) {
+      parts.push("All day");
+    } else if (item.duration) {
+      parts.push(formatDuration(item.duration));
+    }
+  }
   parts.push(isEvent(item) ? "Event" : "Goal");
-  return parts.join(" · ");
+  return parts.join(" - ");
 }
 
 function renderSelectedDayDetails(items) {
@@ -1189,7 +1215,7 @@ function renderSelectedDayDetails(items) {
 
     const meta = document.createElement("span");
     meta.className = "ml-auto text-label-md text-on-surface-variant";
-    meta.textContent = isEvent(item) ? [item.time, formatDuration(item.duration)].filter(Boolean).join(" ") : "Goal";
+    meta.textContent = isEvent(item) ? [item.time, item.all_day ? "All day" : formatDuration(item.duration)].filter(Boolean).join(" ") : "Goal";
 
     row.append(dot, title, meta);
     elements.calendarSelectedList.append(row);
@@ -1409,6 +1435,198 @@ async function deleteTask(taskId) {
   }
 }
 
+function initializeTimeOptions() {
+  populateTimeSelect(elements.timeInput);
+  renderReviewPickers();
+}
+
+function populateTimeSelect(select) {
+  const selectedValue = select.value;
+  select.innerHTML = "";
+  select.append(timeOption("", "Select time"), timeOption(NO_TIME_VALUE, "No time"));
+
+  for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
+    const hour = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    const value = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    select.append(timeOption(value, value));
+  }
+
+  if (selectedValue) setTimeSelectValue(selectedValue, select);
+}
+
+function timeOption(value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+  return option;
+}
+
+function setTimeSelectValue(value, select = elements.timeInput) {
+  if (value && !select.querySelector(`option[value="${CSS.escape(value)}"]`)) {
+    select.append(timeOption(value, value));
+  }
+  select.value = value || "";
+  if (select === elements.timeInput) renderReviewPickers();
+}
+
+function timeValueFromTask(task) {
+  if (task.time) return task.time;
+  if (task.time_mode === "none" || task.all_day) return NO_TIME_VALUE;
+  return "";
+}
+
+function durationValueFromTask(task) {
+  if (task.all_day) return ALL_DAY_DURATION_VALUE;
+  return durationHoursToMinutes(task.duration);
+}
+
+function timeModeFromReview() {
+  if (elements.timeInput.value === NO_TIME_VALUE) return "none";
+  return elements.timeInput.value ? "timed" : null;
+}
+
+function updateDurationOptionsForTime() {
+  const hasNoTime = elements.timeInput.value === NO_TIME_VALUE;
+
+  for (const option of elements.durationInput.options) {
+    const isNoDuration = option.value === "";
+    const isTimedDuration = !isNoDuration && option.value !== ALL_DAY_DURATION_VALUE;
+    option.disabled = hasNoTime && isTimedDuration;
+    option.hidden = option.disabled;
+  }
+
+  if (hasNoTime && !["", ALL_DAY_DURATION_VALUE].includes(elements.durationInput.value)) {
+    elements.durationInput.value = "";
+  }
+  renderReviewPickers();
+}
+
+function handleReviewPickerClick(event) {
+  const button = event.target.closest("button");
+  if (!button || !elements.reviewPanel.contains(button) || button.disabled) return;
+
+  if (button.dataset.timePeriod) {
+    setReviewTimePart({ period: button.dataset.timePeriod });
+    return;
+  }
+
+  if (button.dataset.timeHour) {
+    setReviewTimePart({ hour: Number(button.dataset.timeHour) });
+    return;
+  }
+
+  if (button.dataset.timeMinute) {
+    setReviewTimePart({ minute: Number(button.dataset.timeMinute) });
+    return;
+  }
+
+  if (button.dataset.timeSpecial === "no_time") {
+    setTimeSelectValue(NO_TIME_VALUE);
+    setDurationValue("");
+    updateDurationOptionsForTime();
+    return;
+  }
+
+  if ("durationValue" in button.dataset) {
+    if (button.dataset.durationValue === ALL_DAY_DURATION_VALUE) {
+      setTimeSelectValue(NO_TIME_VALUE);
+    }
+    setDurationValue(button.dataset.durationValue);
+    updateDurationOptionsForTime();
+  }
+}
+
+function setReviewTimePart(update) {
+  const current = timeParts(elements.timeInput.value);
+  const period = update.period || current.period;
+  const hour12 = update.hour ?? current.hour12;
+  const minute = update.minute ?? current.minute;
+  const hour24 = period === "PM" ? (hour12 % 12) + 12 : hour12 % 12;
+  setTimeSelectValue(`${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+  if (elements.durationInput.value === ALL_DAY_DURATION_VALUE) {
+    elements.durationInput.value = "";
+  }
+  updateDurationOptionsForTime();
+}
+
+function timeParts(value) {
+  if (!value || value === NO_TIME_VALUE) return { hour12: 9, minute: 0, period: "AM" };
+  const [rawHour, rawMinute] = String(value).split(":").map(Number);
+  const hour = Number.isFinite(rawHour) ? rawHour : 9;
+  const minute = Number.isFinite(rawMinute) ? rawMinute : 0;
+  return {
+    hour12: hour % 12 || 12,
+    minute,
+    period: hour >= 12 ? "PM" : "AM",
+  };
+}
+
+function setDurationValue(value) {
+  if (value && !elements.durationInput.querySelector(`option[value="${CSS.escape(value)}"]`)) {
+    elements.durationInput.append(timeOption(value, formatMinutesLabel(value)));
+  }
+  elements.durationInput.value = value;
+  if (elements.durationSlider && value && value !== ALL_DAY_DURATION_VALUE) {
+    elements.durationSlider.value = value;
+  }
+  renderReviewPickers();
+}
+
+function renderReviewPickers() {
+  if (!elements.timeInput || !elements.durationInput) return;
+
+  const timeValue = elements.timeInput.value;
+  const selectedParts = timeParts(timeValue);
+  const noTimeSelected = timeValue === NO_TIME_VALUE;
+  const durationValue = elements.durationInput.value;
+
+  if (elements.timePickerReadout) {
+    elements.timePickerReadout.textContent = noTimeSelected
+      ? "No time"
+      : timeValue || "Select time";
+  }
+
+  elements.reviewPanel?.querySelectorAll("[data-time-period]").forEach((button) => {
+    button.classList.toggle("is-active", !noTimeSelected && button.dataset.timePeriod === selectedParts.period);
+  });
+
+  elements.reviewPanel?.querySelectorAll("[data-time-hour]").forEach((button) => {
+    button.classList.toggle("is-active", !noTimeSelected && Number(button.dataset.timeHour) === selectedParts.hour12);
+  });
+
+  elements.reviewPanel?.querySelectorAll("[data-time-minute]").forEach((button) => {
+    button.classList.toggle("is-active", !noTimeSelected && Number(button.dataset.timeMinute) === selectedParts.minute);
+  });
+
+  elements.reviewPanel?.querySelectorAll("[data-time-special='no_time']").forEach((button) => {
+    button.classList.toggle("is-active", noTimeSelected);
+  });
+
+  elements.reviewPanel?.querySelectorAll("[data-duration-value]").forEach((button) => {
+    const isNoDuration = button.dataset.durationValue === "";
+    const isTimedDuration = button.dataset.durationValue && button.dataset.durationValue !== ALL_DAY_DURATION_VALUE;
+    const isActive = button.dataset.durationValue === durationValue
+      && (button.dataset.durationValue !== "" || !durationValue)
+      && !(button.dataset.durationValue === "" && noTimeSelected && durationValue === ALL_DAY_DURATION_VALUE);
+    button.classList.toggle("is-active", isActive);
+    button.disabled = noTimeSelected && isTimedDuration;
+    button.hidden = noTimeSelected ? !(isNoDuration || button.dataset.durationValue === ALL_DAY_DURATION_VALUE) : false;
+  });
+
+  const sliderRow = elements.durationSlider?.closest(".duration-slider-row");
+  if (sliderRow) sliderRow.hidden = noTimeSelected || durationValue === ALL_DAY_DURATION_VALUE;
+  if (elements.durationSlider) elements.durationSlider.disabled = noTimeSelected || durationValue === ALL_DAY_DURATION_VALUE;
+
+  if (elements.durationPickerReadout) {
+    elements.durationPickerReadout.textContent = durationValue === ALL_DAY_DURATION_VALUE
+      ? "All day"
+      : durationValue
+        ? formatMinutesLabel(durationValue)
+        : "No duration";
+  }
+}
+
 function fillReviewPanel(task, questions) {
   const effectiveQuestions = questions.length > 0
     ? questions
@@ -1417,8 +1635,9 @@ function fillReviewPanel(task, questions) {
   elements.titleInput.value = task.title || "";
   elements.descriptionInput.value = task.description || "";
   elements.dateInput.value = task.date || "";
-  elements.timeInput.value = task.time || "";
-  elements.durationInput.value = durationHoursToMinutes(task.duration);
+  setTimeSelectValue(timeValueFromTask(task));
+  elements.durationInput.value = durationValueFromTask(task);
+  updateDurationOptionsForTime();
   refreshProjectOptions(task.project);
   elements.newProjectInput.value = "";
   renderFollowUps(effectiveQuestions);
@@ -1444,13 +1663,18 @@ function renderFollowUps(questions) {
     label.htmlFor = `follow-up-${field}`;
     label.textContent = labelForField(field);
 
-    const input = document.createElement("input");
+    const input = field === "time" ? document.createElement("select") : document.createElement("input");
     input.className = "w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary";
     input.id = `follow-up-${field}`;
     input.name = field;
-    input.type = field === "duration" ? "number" : field === "date" ? "date" : field === "time" ? "time" : "text";
-    input.step = field === "duration" ? "0.25" : "";
-    input.placeholder = placeholderForField(field);
+
+    if (field === "time") {
+      populateTimeSelect(input);
+    } else {
+      input.type = field === "duration" ? "number" : field === "date" ? "date" : "text";
+      input.step = field === "duration" ? "0.25" : "";
+      input.placeholder = placeholderForField(field);
+    }
 
     wrapper.append(label, input);
     elements.followUpFields.append(wrapper);
@@ -1458,14 +1682,18 @@ function renderFollowUps(questions) {
 }
 
 function taskFromReview() {
+  const timeMode = timeModeFromReview();
+  const allDay = timeMode === "none" && elements.durationInput.value === ALL_DAY_DURATION_VALUE;
   const task = {
     ...(pendingTask || {}),
     ...editableMetadataFromReview(),
     title: elements.titleInput.value.trim(),
     description: elements.descriptionInput.value.trim(),
     date: elements.dateInput.value || null,
-    time: elements.timeInput.value || null,
-    duration: durationMinutesToHours(elements.durationInput.value),
+    time: timeMode === "timed" ? elements.timeInput.value : null,
+    time_mode: timeMode,
+    duration: allDay ? null : durationMinutesToHours(elements.durationInput.value),
+    all_day: allDay,
     completed: Boolean(pendingTask?.completed),
     archived: Boolean(pendingTask?.archived),
   };
@@ -1477,7 +1705,7 @@ function taskFromReview() {
 
 function computeMissingInfo(task) {
   const missing = [];
-  if (task.date && !task.time) missing.push("time");
+  if (task.date && !task.time && task.time_mode !== "none") missing.push("time");
   if (task.time && !task.date) missing.push("date");
   return missing;
 }
@@ -1507,7 +1735,9 @@ function openManualTask() {
     description: "",
     date: null,
     time: null,
+    time_mode: null,
     duration: null,
+    all_day: false,
     completed: false,
     archived: false,
     project: "project",
@@ -1581,7 +1811,9 @@ function normalizeTask(task) {
     description: task.description || "",
     date: task.date || null,
     time: task.time || null,
+    time_mode: task.time_mode || (task.time ? "timed" : null),
     duration: task.duration ?? null,
+    all_day: Boolean(task.all_day),
     completed: Boolean(task.completed),
     archived: Boolean(task.archived),
     project: cleanProject(task.project) || "project",
@@ -1599,7 +1831,9 @@ function taskPatchPayload(task) {
     description: task.description,
     date: task.date,
     time: task.time,
+    time_mode: task.time_mode,
     duration: task.duration,
+    all_day: task.all_day,
     completed: task.completed,
     archived: task.archived,
     project: task.project,
@@ -1777,6 +2011,7 @@ function formatMeta(task) {
   const parts = [];
   if (task.date) parts.push({ icon: "calendar_today", text: task.date });
   if (task.time) parts.push({ icon: "schedule", text: task.time });
+  if (task.all_day) parts.push({ icon: "event", text: "All day" });
   if (task.duration) parts.push({ icon: "timer", text: formatDuration(task.duration) });
   return parts;
 }
@@ -1787,6 +2022,14 @@ function formatDuration(hours) {
   if (minutes % 60 === 0) return `${minutes / 60}h`;
   if (minutes > 60) return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
   return `${minutes}m`;
+}
+
+function formatMinutesLabel(minutes) {
+  const value = Number(minutes);
+  if (!Number.isFinite(value) || value <= 0) return "No duration";
+  if (value % 60 === 0) return `${value / 60}h`;
+  if (value > 60) return `${Math.floor(value / 60)}h ${value % 60}m`;
+  return `${value}m`;
 }
 
 function durationHoursToMinutes(hours) {
