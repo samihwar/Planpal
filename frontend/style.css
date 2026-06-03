@@ -103,7 +103,8 @@ textarea {
 .duration-special-row,
 .duration-chip-row,
 .minute-chip-row,
-.time-special-row {
+.time-special-row,
+.time-manual-row {
   display: flex;
   gap: 8px;
 }
@@ -130,6 +131,29 @@ textarea {
 .time-special-row {
   padding-top: 6px;
   border-top: 1px solid rgba(195, 198, 215, 0.7);
+}
+
+.time-manual-row {
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 6px;
+}
+
+.time-manual-input {
+  min-width: 132px;
+  padding: 6px 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.time-manual-input:focus {
+  border-color: var(--app-primary);
+  box-shadow: 0 0 0 2px rgba(0, 74, 198, 0.12);
+  outline: none;
 }
 
 .duration-slider-row {

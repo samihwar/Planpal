@@ -2,6 +2,7 @@ const API_BASE = window.location.origin;
 const currentUserId = "default";
 const PROJECT_COLORS_KEY = "planpal-project-colors";
 const DEFAULT_PROJECT_COLOR = "#004ac6";
+const DEFAULT_PROJECT_NAME = "no project";
 const NO_TIME_VALUE = "__no_time__";
 const ALL_DAY_DURATION_VALUE = "all_day";
 
@@ -15,6 +16,7 @@ let calendarMode = window.matchMedia?.("(max-width: 760px)")?.matches ? "schedul
 let selectedCalendarDate = localDateKey(new Date());
 let projectColors = loadProjectColors();
 let deferredInstallPrompt = null;
+let isBusy = false;
 
 const elements = {
   taskInput: document.querySelector("#task-input"),
@@ -27,6 +29,7 @@ const elements = {
   descriptionInput: document.querySelector("#parsed-description-input"),
   dateInput: document.querySelector("#parsed-date-input"),
   timeInput: document.querySelector("#parsed-time-input"),
+  manualTimeInput: document.querySelector("#manual-time-input"),
   durationInput: document.querySelector("#parsed-duration-input"),
   durationSlider: document.querySelector("#duration-slider-input"),
   timePickerReadout: document.querySelector("#time-picker-readout"),
@@ -99,6 +102,8 @@ function bindEvents() {
   elements.confirmButton.addEventListener("click", handleConfirm);
   elements.discardButton.addEventListener("click", resetPendingTask);
   elements.timeInput.addEventListener("change", updateDurationOptionsForTime);
+  elements.manualTimeInput?.addEventListener("input", handleManualTimeInput);
+  elements.manualTimeInput?.addEventListener("change", handleManualTimeInput);
   elements.durationInput.addEventListener("change", () => {
     if (elements.durationInput.value === ALL_DAY_DURATION_VALUE) {
       elements.timeInput.value = NO_TIME_VALUE;
@@ -110,6 +115,16 @@ function bindEvents() {
   elements.durationSlider?.addEventListener("input", () => {
     setDurationValue(elements.durationSlider.value);
   });
+  [
+    elements.titleInput,
+    elements.descriptionInput,
+    elements.dateInput,
+    elements.timeInput,
+    elements.durationInput,
+    elements.projectInput,
+    elements.newProjectInput,
+  ].forEach((input) => input?.addEventListener("input", updateReviewStateFromInputs));
+  elements.projectInput?.addEventListener("change", updateReviewStateFromInputs);
   elements.newProjectInput.addEventListener("input", () => {
     if (elements.newProjectInput.value.trim()) {
       elements.projectInput.value = "";
@@ -332,6 +347,13 @@ async function handleConfirm() {
   if (!pendingTask) return;
 
   const task = taskFromReview();
+  if (task.missing_info?.length) {
+    updateMissingInfo(task.missing_info);
+    updateConfirmAvailability(task);
+    showError(`Please complete: ${task.missing_info.join(", ")}.`);
+    return;
+  }
+
   const manualMissing = pendingEntryMode === "manual" ? missingManualFields(task) : [];
   if (manualMissing.length > 0) {
     showError(`Manual mode needs: ${manualMissing.join(", ")}.`);
@@ -435,14 +457,9 @@ function groupTasks(taskList) {
       grouped.tasks.push(task);
     }
 
-    if (task.date) {
-      if (!grouped.datedItems.has(task.date)) {
-        grouped.datedItems.set(task.date, []);
-      }
-      grouped.datedItems.get(task.date).push(task);
-    }
+    addTaskToCalendarDates(grouped.datedItems, task);
 
-    const project = task.project || "project";
+    const project = task.project || DEFAULT_PROJECT_NAME;
     if (!grouped.projects.has(project)) {
       grouped.projects.set(project, []);
     }
@@ -454,6 +471,82 @@ function groupTasks(taskList) {
 
 function isEvent(task) {
   return Boolean(task.all_day) || (task.duration != null && Number(task.duration) > 0);
+}
+
+function addTaskToCalendarDates(calendarItems, task) {
+  if (!task.date) return;
+
+  const occurrences = calendarOccurrencesForTask(task);
+  for (const occurrence of occurrences) {
+    if (!calendarItems.has(occurrence.dateKey)) {
+      calendarItems.set(occurrence.dateKey, []);
+    }
+    calendarItems.get(occurrence.dateKey).push(occurrence.item);
+  }
+}
+
+function calendarOccurrencesForTask(task) {
+  if (!isTimedEvent(task)) {
+    return [{ dateKey: task.date, item: task }];
+  }
+
+  const start = dateTimeFromParts(task.date, task.time);
+  const durationHours = Number(task.duration);
+  if (!start || !Number.isFinite(durationHours) || durationHours <= 0) {
+    return [{ dateKey: task.date, item: task }];
+  }
+
+  const end = new Date(start.getTime() + durationHours * 60 * 60 * 1000);
+  const startDay = startOfLocalDay(start);
+  const lastTouched = new Date(end.getTime() - 1);
+  const endDay = startOfLocalDay(lastTouched);
+  const occurrences = [];
+
+  for (let day = new Date(startDay); day <= endDay; day.setDate(day.getDate() + 1)) {
+    const dateKey = localDateKey(day);
+    const occurrenceStart = day.getTime() === startDay.getTime() ? start : new Date(day);
+    const nextDay = new Date(day);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const occurrenceEnd = end < nextDay ? end : nextDay;
+    const occurrenceMinutes = Math.max(1, Math.round((occurrenceEnd - occurrenceStart) / 60000));
+
+    occurrences.push({
+      dateKey,
+      item: {
+        ...task,
+        occurrence_date: dateKey,
+        occurrence_time: `${String(occurrenceStart.getHours()).padStart(2, "0")}:${String(occurrenceStart.getMinutes()).padStart(2, "0")}`,
+        occurrence_duration: occurrenceMinutes / 60,
+        occurrence_continues_from_previous: day.getTime() !== startDay.getTime(),
+        occurrence_continues_to_next: occurrenceEnd < end,
+      },
+    });
+  }
+
+  return occurrences;
+}
+
+function isTimedEvent(task) {
+  return Boolean(task.date && task.time && task.duration && Number(task.duration) > 0);
+}
+
+function dateTimeFromParts(date, time) {
+  const [year, month, day] = String(date).split("-").map(Number);
+  const [hour, minute] = String(time).split(":").map(Number);
+  if (![year, month, day, hour, minute].every(Number.isFinite)) return null;
+  return new Date(year, month - 1, day, hour, minute);
+}
+
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function calendarItemTime(item) {
+  return item.occurrence_time ?? item.time;
+}
+
+function calendarItemDuration(item) {
+  return item.occurrence_duration ?? item.duration;
 }
 
 function renderList(container, taskList, options = {}) {
@@ -721,7 +814,7 @@ function renderWeekDayScroller(visibleDates, calendarGroups) {
 
 function renderWeekAgenda(items) {
   const goals = items.filter((task) => !isEvent(task));
-  const events = items.filter(isEvent).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const events = items.filter(isEvent).sort((a, b) => (calendarItemTime(a) || "").localeCompare(calendarItemTime(b) || ""));
   const selected = new Date(`${selectedCalendarDate}T00:00:00`);
 
   const heading = document.createElement("div");
@@ -769,7 +862,7 @@ function renderMobileEventCard(event) {
   const label = document.createElement("span");
   label.className = "text-label-md font-bold uppercase";
   label.style.color = projectColor(event.project);
-  label.textContent = ["Event", event.time, event.all_day ? "All day" : formatDuration(event.duration)].filter(Boolean).join(" - ");
+  label.textContent = ["Event", calendarItemTime(event), event.all_day ? "All day" : formatDuration(calendarItemDuration(event))].filter(Boolean).join(" - ");
 
   const title = document.createElement("h3");
   title.className = "font-headline-md text-on-surface font-semibold mt-xs";
@@ -804,7 +897,7 @@ function renderMobileGoalCard(goal) {
   meta.className = "flex items-center gap-md mt-xs";
   const badge = document.createElement("span");
   badge.className = "px-sm py-0.5 bg-surface-container-high text-on-surface-variant text-[10px] font-bold rounded uppercase";
-  badge.textContent = goal.project || "project";
+  badge.textContent = goal.project || DEFAULT_PROJECT_NAME;
   badge.style.backgroundColor = projectTint(goal.project);
   badge.style.color = projectColor(goal.project);
   meta.append(badge);
@@ -821,7 +914,7 @@ function renderCalendarSchedule(calendarGroups) {
   for (const date of sortedDates) {
     const items = calendarGroups.get(date).slice().sort((a, b) => {
       if (isEvent(a) !== isEvent(b)) return isEvent(a) ? 1 : -1;
-      return (a.time || "").localeCompare(b.time || "");
+      return (calendarItemTime(a) || "").localeCompare(calendarItemTime(b) || "");
     });
 
     const section = document.createElement("section");
@@ -894,10 +987,10 @@ function renderWeekTimeGrid(visibleDates, calendarGroups, today) {
     listElements.calendar.append(dayHeader);
   }
 
-  appendWeekTimeRow("All day", visibleDates, calendarGroups, (item) => !item.time);
+  appendWeekTimeRow("All day", visibleDates, calendarGroups, (item) => !calendarItemTime(item));
 
   for (let hour = startHour; hour <= endHour; hour += 1) {
-    appendWeekTimeRow(formatHourLabel(hour), visibleDates, calendarGroups, (item) => timeHour(item.time) === hour);
+    appendWeekTimeRow(formatHourLabel(hour), visibleDates, calendarGroups, (item) => timeHour(calendarItemTime(item)) === hour);
   }
 }
 
@@ -951,7 +1044,7 @@ function renderWeekTimeGridItem(item) {
 }
 
 function getWeekHourRange(items) {
-  const hours = items.map((item) => timeHour(item.time)).filter((hour) => hour != null);
+  const hours = items.map((item) => timeHour(calendarItemTime(item))).filter((hour) => hour != null);
   if (hours.length === 0) return { startHour: 8, endHour: 18 };
 
   const minHour = Math.min(...hours);
@@ -973,7 +1066,7 @@ function formatHourLabel(hour) {
 }
 
 function compareWeekGridItems(a, b) {
-  const timeCompare = (a.time || "").localeCompare(b.time || "");
+  const timeCompare = (calendarItemTime(a) || "").localeCompare(calendarItemTime(b) || "");
   if (timeCompare !== 0) return timeCompare;
   if (isEvent(a) !== isEvent(b)) return isEvent(a) ? -1 : 1;
   return (a.title || "").localeCompare(b.title || "");
@@ -983,7 +1076,7 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
   const dateKey = localDateKey(date);
   const items = (calendarGroups.get(dateKey) || []).slice();
   const dayTasks = items.filter((task) => !isEvent(task));
-  const dayEvents = items.filter(isEvent).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const dayEvents = items.filter(isEvent).sort((a, b) => (calendarItemTime(a) || "").localeCompare(calendarItemTime(b) || ""));
 
   const cell = document.createElement("button");
   cell.className = "min-h-[145px] bg-white p-sm flex flex-col gap-xs overflow-hidden text-left hover:bg-surface-bright transition-colors";
@@ -1072,7 +1165,7 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
     const eventButton = document.createElement("button");
     const durationMinutes = event.all_day
       ? 28
-      : Math.max(20, Math.min(calendarMode === "week" ? 150 : 90, Math.round(Number(event.duration) * 28)));
+      : Math.max(20, Math.min(calendarMode === "week" ? 150 : 90, Math.round(Number(calendarItemDuration(event)) * 28)));
     eventButton.className = "text-left rounded px-xs py-xs shadow-sm overflow-hidden";
     eventButton.style.backgroundColor = projectColor(event.project);
     eventButton.style.color = "#ffffff";
@@ -1089,7 +1182,7 @@ function renderCalendarDay(date, calendarGroups, today, options = {}) {
 
     const meta = document.createElement("div");
     meta.className = "text-[10px] opacity-90";
-    meta.textContent = [event.time, event.all_day ? "All day" : formatDuration(event.duration)].filter(Boolean).join(" - ");
+    meta.textContent = [calendarItemTime(event), event.all_day ? "All day" : formatDuration(calendarItemDuration(event))].filter(Boolean).join(" - ");
 
     eventButton.append(title, meta);
     eventStack.append(eventButton);
@@ -1115,7 +1208,7 @@ function renderCompactMonthItems(cell, items) {
     indicator.className = "month-compact-item";
     indicator.style.backgroundColor = isEvent(item) ? projectColor(item.project) : projectTint(item.project);
     indicator.style.color = isEvent(item) ? "#ffffff" : projectColor(item.project);
-    indicator.textContent = [item.time, item.title || (isEvent(item) ? "Untitled event" : "Untitled goal")]
+    indicator.textContent = [calendarItemTime(item), item.title || (isEvent(item) ? "Untitled event" : "Untitled goal")]
       .filter(Boolean)
       .join(" ");
     indicator.title = indicator.textContent;
@@ -1138,11 +1231,11 @@ function isPhoneLayout() {
 
 function sortTasksForWeek(taskList) {
   return [...taskList].sort((a, b) => {
-    const aHasTime = Boolean(a.time);
-    const bHasTime = Boolean(b.time);
+    const aHasTime = Boolean(calendarItemTime(a));
+    const bHasTime = Boolean(calendarItemTime(b));
     if (aHasTime !== bHasTime) return aHasTime ? -1 : 1;
 
-    const timeCompare = (a.time || "").localeCompare(b.time || "");
+    const timeCompare = (calendarItemTime(a) || "").localeCompare(calendarItemTime(b) || "");
     if (timeCompare !== 0) return timeCompare;
 
     if (isEvent(a) !== isEvent(b)) return isEvent(a) ? -1 : 1;
@@ -1174,12 +1267,12 @@ function renderWeekCalendarItem(item) {
 }
 
 function formatWeekItemMeta(item) {
-  const parts = [item.time || "Any time"];
+  const parts = [calendarItemTime(item) || "Any time"];
   if (isEvent(item)) {
     if (item.all_day) {
       parts.push("All day");
-    } else if (item.duration) {
-      parts.push(formatDuration(item.duration));
+    } else if (calendarItemDuration(item)) {
+      parts.push(formatDuration(calendarItemDuration(item)));
     }
   }
   parts.push(isEvent(item) ? "Event" : "Goal");
@@ -1188,7 +1281,7 @@ function formatWeekItemMeta(item) {
 
 function renderSelectedDayDetails(items) {
   const goals = items.filter((task) => !isEvent(task));
-  const events = items.filter(isEvent).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
+  const events = items.filter(isEvent).sort((a, b) => (calendarItemTime(a) || "").localeCompare(calendarItemTime(b) || ""));
   const selected = new Date(`${selectedCalendarDate}T00:00:00`);
 
   elements.calendarSelectedDate.textContent = selected.toLocaleDateString(undefined, {
@@ -1215,7 +1308,7 @@ function renderSelectedDayDetails(items) {
 
     const meta = document.createElement("span");
     meta.className = "ml-auto text-label-md text-on-surface-variant";
-    meta.textContent = isEvent(item) ? [item.time, item.all_day ? "All day" : formatDuration(item.duration)].filter(Boolean).join(" ") : "Goal";
+    meta.textContent = isEvent(item) ? [calendarItemTime(item), item.all_day ? "All day" : formatDuration(calendarItemDuration(item))].filter(Boolean).join(" ") : "Goal";
 
     row.append(dot, title, meta);
     elements.calendarSelectedList.append(row);
@@ -1500,6 +1593,7 @@ function updateDurationOptionsForTime() {
     elements.durationInput.value = "";
   }
   renderReviewPickers();
+  updateReviewStateFromInputs();
 }
 
 function handleReviewPickerClick(event) {
@@ -1543,7 +1637,16 @@ function setReviewTimePart(update) {
   const hour12 = update.hour ?? current.hour12;
   const minute = update.minute ?? current.minute;
   const hour24 = period === "PM" ? (hour12 % 12) + 12 : hour12 % 12;
-  setTimeSelectValue(`${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+  setReviewTimeValue(`${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`);
+}
+
+function handleManualTimeInput() {
+  if (!elements.manualTimeInput?.value) return;
+  setReviewTimeValue(elements.manualTimeInput.value);
+}
+
+function setReviewTimeValue(value) {
+  setTimeSelectValue(value);
   if (elements.durationInput.value === ALL_DAY_DURATION_VALUE) {
     elements.durationInput.value = "";
   }
@@ -1571,6 +1674,7 @@ function setDurationValue(value) {
     elements.durationSlider.value = value;
   }
   renderReviewPickers();
+  updateReviewStateFromInputs();
 }
 
 function renderReviewPickers() {
@@ -1585,6 +1689,10 @@ function renderReviewPickers() {
     elements.timePickerReadout.textContent = noTimeSelected
       ? "No time"
       : timeValue || "Select time";
+  }
+
+  if (elements.manualTimeInput) {
+    elements.manualTimeInput.value = noTimeSelected ? "" : timeValue;
   }
 
   elements.reviewPanel?.querySelectorAll("[data-time-period]").forEach((button) => {
@@ -1641,8 +1749,16 @@ function fillReviewPanel(task, questions) {
   refreshProjectOptions(task.project);
   elements.newProjectInput.value = "";
   renderFollowUps(effectiveQuestions);
-  updateMissingInfo(task.missing_info || []);
+  updateMissingInfo(reviewMissingFields(task));
   updateReviewActions(task);
+  updateConfirmAvailability(task);
+}
+
+function updateReviewStateFromInputs() {
+  if (!pendingTask || elements.reviewPanel.classList.contains("hidden")) return;
+  const task = taskFromReview();
+  updateMissingInfo(reviewMissingFields(task));
+  updateConfirmAvailability(task);
 }
 
 function renderFollowUps(questions) {
@@ -1705,6 +1821,7 @@ function taskFromReview() {
 
 function computeMissingInfo(task) {
   const missing = [];
+  if (!task.title?.trim()) missing.push("title");
   if (task.date && !task.time && task.time_mode !== "none") missing.push("time");
   if (task.time && !task.date) missing.push("date");
   return missing;
@@ -1740,7 +1857,7 @@ function openManualTask() {
     all_day: false,
     completed: false,
     archived: false,
-    project: "project",
+    project: DEFAULT_PROJECT_NAME,
     missing_info: [],
     follow_up_questions: [],
   });
@@ -1769,10 +1886,27 @@ function updateReviewActions(task) {
   elements.applyDetailsButton.classList.toggle("text-on-surface-variant", !isEditing);
 }
 
+function updateConfirmAvailability(task = null) {
+  const reviewTask = task || (pendingTask ? taskFromReview() : null);
+  const missingInfo = reviewTask ? reviewMissingFields(reviewTask) : [];
+  elements.confirmButton.disabled = isBusy || missingInfo.length > 0;
+  elements.confirmButton.title = missingInfo.length ? `Missing: ${missingInfo.join(", ")}` : "";
+}
+
+function reviewMissingFields(task) {
+  const missing = new Set(task.missing_info || []);
+  if (pendingEntryMode === "manual") {
+    for (const field of missingManualFields(task)) {
+      missing.add(field);
+    }
+  }
+  return [...missing];
+}
+
 function editableMetadataFromReview() {
   const newProject = elements.newProjectInput.value.trim();
   const project = newProject || elements.projectInput.value.trim();
-  return { project: project || "project" };
+  return { project: project || DEFAULT_PROJECT_NAME };
 }
 
 function collectFollowUpAnswers(missingFields = []) {
@@ -1811,12 +1945,12 @@ function normalizeTask(task) {
     description: task.description || "",
     date: task.date || null,
     time: task.time || null,
-    time_mode: task.time_mode || (task.time ? "timed" : null),
+    time_mode: task.time_mode || (task.time ? "timed" : "none"),
     duration: task.duration ?? null,
     all_day: Boolean(task.all_day),
     completed: Boolean(task.completed),
     archived: Boolean(task.archived),
-    project: cleanProject(task.project) || "project",
+    project: cleanProject(task.project) || DEFAULT_PROJECT_NAME,
     missing_info: [],
     follow_up_questions: [],
   };
@@ -1843,7 +1977,8 @@ function taskPatchPayload(task) {
 function cleanProject(project) {
   if (project == null) return null;
   const value = String(project).trim();
-  return value || null;
+  if (!value || value.toLowerCase() === "project") return DEFAULT_PROJECT_NAME;
+  return value;
 }
 
 function refreshProjectOptions(selectedProject = null) {
@@ -1854,12 +1989,13 @@ function refreshProjectOptions(selectedProject = null) {
   );
   const selected = cleanProject(selectedProject);
   if (selected) projectNames.add(selected);
+  projectNames.delete(DEFAULT_PROJECT_NAME);
 
   elements.projectInput.innerHTML = "";
 
   const emptyOption = document.createElement("option");
-  emptyOption.value = "project";
-  emptyOption.textContent = "project";
+  emptyOption.value = DEFAULT_PROJECT_NAME;
+  emptyOption.textContent = DEFAULT_PROJECT_NAME;
   elements.projectInput.append(emptyOption);
 
   for (const project of [...projectNames].sort((a, b) => a.localeCompare(b))) {
@@ -1869,7 +2005,7 @@ function refreshProjectOptions(selectedProject = null) {
     elements.projectInput.append(option);
   }
 
-  elements.projectInput.value = selected || "";
+  elements.projectInput.value = selected || DEFAULT_PROJECT_NAME;
   syncProjectColorInput();
 }
 
@@ -1882,13 +2018,13 @@ function loadProjectColors() {
 }
 
 function saveProjectColor(project, color) {
-  const clean = cleanProject(project) || "project";
+  const clean = cleanProject(project) || DEFAULT_PROJECT_NAME;
   projectColors[clean] = color || DEFAULT_PROJECT_COLOR;
   localStorage.setItem(PROJECT_COLORS_KEY, JSON.stringify(projectColors));
 }
 
 function projectColor(project) {
-  const clean = cleanProject(project) || "project";
+  const clean = cleanProject(project) || DEFAULT_PROJECT_NAME;
   return projectColors[clean] || DEFAULT_PROJECT_COLOR;
 }
 
@@ -1897,7 +2033,7 @@ function projectTint(project) {
 }
 
 function syncProjectColorInput() {
-  const project = elements.newProjectInput.value.trim() || elements.projectInput.value || "project";
+  const project = elements.newProjectInput.value.trim() || elements.projectInput.value || DEFAULT_PROJECT_NAME;
   elements.projectColorInput.value = projectColor(project);
 }
 
@@ -1957,12 +2093,14 @@ function resetPendingTask() {
   elements.reviewPanel.classList.remove("flex");
   updateReviewActions({});
   updateMissingInfo([]);
+  updateConfirmAvailability(null);
 }
 
 function missingManualFields(task) {
   const labels = {
     title: "title",
     description: "description",
+    date: "date",
   };
 
   return Object.entries(labels)
@@ -1970,13 +2108,14 @@ function missingManualFields(task) {
     .map(([, label]) => label);
 }
 
-function setBusy(isBusy, message = "Parsing your task...") {
-  elements.parseButton.disabled = isBusy;
-  elements.applyDetailsButton.disabled = isBusy;
-  elements.confirmButton.disabled = isBusy;
+function setBusy(busy, message = "Parsing your task...") {
+  isBusy = busy;
+  elements.parseButton.disabled = busy;
+  elements.applyDetailsButton.disabled = busy;
+  updateConfirmAvailability();
   elements.loadingMessage.textContent = message;
-  elements.loadingOverlay.classList.toggle("hidden", !isBusy);
-  elements.loadingOverlay.classList.toggle("flex", isBusy);
+  elements.loadingOverlay.classList.toggle("hidden", !busy);
+  elements.loadingOverlay.classList.toggle("flex", busy);
 }
 
 function setSyncDisabled(isDisabled) {
@@ -2009,10 +2148,10 @@ function toggleEmpty(element, isEmpty) {
 
 function formatMeta(task) {
   const parts = [];
-  if (task.date) parts.push({ icon: "calendar_today", text: task.date });
-  if (task.time) parts.push({ icon: "schedule", text: task.time });
+  if (task.occurrence_date || task.date) parts.push({ icon: "calendar_today", text: task.occurrence_date || task.date });
+  if (calendarItemTime(task)) parts.push({ icon: "schedule", text: calendarItemTime(task) });
   if (task.all_day) parts.push({ icon: "event", text: "All day" });
-  if (task.duration) parts.push({ icon: "timer", text: formatDuration(task.duration) });
+  if (calendarItemDuration(task)) parts.push({ icon: "timer", text: formatDuration(calendarItemDuration(task)) });
   return parts;
 }
 

@@ -289,6 +289,10 @@
                       <button class="picker-chip" data-time-minute="30" type="button">:30</button>
                       <button class="picker-chip" data-time-minute="45" type="button">:45</button>
                     </div>
+                    <div class="time-manual-row">
+                      <label class="picker-kicker" for="manual-time-input">Manual</label>
+                      <input class="time-manual-input" id="manual-time-input" type="time">
+                    </div>
                     <div class="time-special-row" aria-label="Time options">
                       <button class="picker-chip" data-time-special="no_time" type="button">No time</button>
                     </div>
@@ -337,7 +341,7 @@
                 <div>
                   <label class="font-label-sm text-outline uppercase mb-1 block" for="parsed-project-input">Project</label>
                   <select class="w-full bg-surface-container-lowest border border-outline-variant rounded-lg px-md py-sm focus:ring-1 focus:ring-primary" id="parsed-project-input">
-                    <option value="project">project</option>
+                    <option value="no project">no project</option>
                   </select>
                 </div>
                 <div>

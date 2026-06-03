@@ -61,7 +61,7 @@ class TaskStorage:
         saved_task.setdefault("created_at", datetime.now(timezone.utc).isoformat())
         saved_task.setdefault("completed", False)
         saved_task.setdefault("archived", False)
-        saved_task.setdefault("project", "project")
+        saved_task.setdefault("project", "no project")
         tasks.append(saved_task)
         self.save_tasks(tasks)
         return saved_task

@@ -7,6 +7,7 @@ from task_parser import normalize_user_profile, parse_task, resolve_temporal_upd
 
 OPTIONAL_SCHEDULING_FIELDS = ("date", "time", "duration")
 DEFAULT_USER_ID = "default"
+DEFAULT_PROJECT_NAME = "no project"
 NO_TIME_ANSWERS = {"__no_time__", "no time", "none", "no", "notime"}
 SIMPLE_HOUR_PATTERN = re.compile(r"^\s*(?P<hour>\d{1,2})\s*$")
 SIMPLE_TIME_PATTERN = re.compile(r"^\s*(?P<hour>\d{1,2}):(?P<minute>\d{1,2})\s*$")
@@ -17,15 +18,19 @@ AM_PM_TIME_PATTERN = re.compile(
 
 
 def normalize_task(task: Dict[str, Any]) -> Dict[str, Any]:
+    time = task.get("time")
+    project = str(task.get("project") or "").strip()
+    if not project or project.lower() == "project":
+        project = DEFAULT_PROJECT_NAME
     return {
         "title": task.get("title") or "",
         "description": task.get("description") or "",
         "date": task.get("date"),
-        "time": task.get("time"),
-        "time_mode": task.get("time_mode"),
+        "time": time,
+        "time_mode": task.get("time_mode") or ("timed" if time else "none"),
         "duration": task.get("duration"),
         "all_day": bool(task.get("all_day", False)),
-        "project": task.get("project") or "project",
+        "project": project,
         "archived": bool(task.get("archived", False)),
     }
 
@@ -284,21 +289,26 @@ def parse_task_with_missing_info(
     )
 
     if refreshed["missing_info"]:
-        revised_parse = revise_parse(
-            text,
-            normalized,
-            backend=backend,
-            user_profile=effective_profile,
-            adaptive_rules=adaptive_rules,
-            **kwargs,
-        )
-        normalized = _merge_missing_fields(normalized, normalize_task(revised_parse))
-        refreshed = refresh_task_state(
-            normalized,
-            reference_now=reference_now,
-            fields=fields,
-            followup_preference=effective_profile["followup_preference"],
-        )
+        try:
+            revised_parse = revise_parse(
+                text,
+                normalized,
+                backend=backend,
+                user_profile=effective_profile,
+                adaptive_rules=adaptive_rules,
+                **kwargs,
+            )
+        except Exception:
+            revised_parse = None
+
+        if revised_parse is not None:
+            normalized = _merge_missing_fields(normalized, normalize_task(revised_parse))
+            refreshed = refresh_task_state(
+                normalized,
+                reference_now=reference_now,
+                fields=fields,
+                followup_preference=effective_profile["followup_preference"],
+            )
 
     refreshed["user_id"] = user_id
     refreshed["user_profile"] = effective_profile

@@ -17,6 +17,7 @@ from task_handler import apply_follow_up_answer, parse_task_with_missing_info
 
 router = APIRouter()
 storage = TaskStorage("data/tasks.json")
+DEFAULT_PROJECT_NAME = "no project"
 
 
 def _parser_config() -> dict[str, Any]:
@@ -32,9 +33,11 @@ def _parser_config() -> dict[str, Any]:
 
 def _clean_project(value: Any) -> str | None:
     if value is None:
-        return "project"
+        return DEFAULT_PROJECT_NAME
     project = str(value).strip()
-    return project or "project"
+    if not project or project.lower() == "project":
+        return DEFAULT_PROJECT_NAME
+    return project
 
 
 def _public_task(task: dict[str, Any]) -> dict[str, Any]:
