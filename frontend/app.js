@@ -263,6 +263,7 @@ function isLocalhost() {
 }
 
 async function handleParse() {
+  if (isBusy) return;
   if (entryMode === "manual") {
     openManualTask();
     return;
@@ -280,10 +281,10 @@ async function handleParse() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_input: userInput, user_id: currentUserId }),
     });
-    const data = await response.json();
+    const data = await readApiResponse(response);
 
     if (!response.ok) {
-      throw new Error(data.detail || "Parsing failed");
+      throw new Error(apiErrorMessage(data, "Parsing failed"));
     }
 
     pendingEntryMode = "auto";
@@ -299,11 +300,15 @@ async function handleParse() {
 }
 
 async function handleApplyDetails() {
-  if (!pendingTask) return;
+  if (!pendingTask || isBusy) return;
 
   if (pendingTask.id) {
-    await deleteTask(pendingTask.id);
-    resetPendingTask();
+    setBusy(true, "Deleting task...");
+    try {
+      if (await deleteTask(pendingTask.id)) resetPendingTask();
+    } finally {
+      setBusy(false);
+    }
     return;
   }
 
@@ -326,10 +331,10 @@ async function handleApplyDetails() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ task: pendingTask, answers, user_id: currentUserId }),
     });
-    const data = await response.json();
+    const data = await readApiResponse(response);
 
     if (!response.ok) {
-      throw new Error(data.detail || "Could not apply follow-up answers");
+      throw new Error(apiErrorMessage(data, "Could not apply follow-up answers"));
     }
 
     pendingTask = { ...normalizeTask(data.task), ...editableMetadataFromReview() };
@@ -344,7 +349,7 @@ async function handleApplyDetails() {
 }
 
 async function handleConfirm() {
-  if (!pendingTask) return;
+  if (!pendingTask || isBusy) return;
 
   const task = taskFromReview();
   if (task.missing_info?.length) {
@@ -379,10 +384,10 @@ async function handleConfirm() {
         body: JSON.stringify(isEditingExistingTask ? taskPatchPayload(task) : { task, user_id: currentUserId }),
       },
     );
-    const data = await response.json();
+    const data = await readApiResponse(response);
 
     if (!response.ok) {
-      throw new Error(data.detail || "Could not save task");
+      throw new Error(apiErrorMessage(data, "Could not save task"));
     }
 
     resetPendingTask();
@@ -401,14 +406,17 @@ async function loadTasks(options = {}) {
 
   try {
     const response = await fetch(`${API_BASE}/api/tasks?user_id=${encodeURIComponent(currentUserId)}`);
-    const data = await response.json();
+    const data = await readApiResponse(response);
 
     if (!response.ok) {
-      throw new Error(data.detail || "Could not load tasks");
+      throw new Error(apiErrorMessage(data, "Could not load tasks"));
     }
 
     tasks = (data.tasks || []).map(normalizeTask);
-    refreshProjectOptions();
+    const selectedProject = pendingTask ? elements.projectInput.value : null;
+    const selectedColor = elements.projectColorInput.value;
+    refreshProjectOptions(selectedProject);
+    if (pendingTask) elements.projectColorInput.value = selectedColor;
     renderTasks();
     if (!options.quiet) showToast("Tasks synced");
   } catch (error) {
@@ -1405,10 +1413,12 @@ function renderTaskCard(task, options = {}) {
   checkbox.className = "w-5 h-5 rounded border-outline text-secondary focus:ring-secondary cursor-pointer";
   checkbox.type = "checkbox";
   checkbox.checked = Boolean(task.completed);
-  checkbox.disabled = Boolean(task.archived);
+  checkbox.setAttribute("aria-label", task.completed ? "Mark as undone" : "Mark as done");
   checkbox.addEventListener("change", () => {
-    const updates = checkbox.checked ? { completed: true, archived: true } : { completed: false };
-    updateTask(task.id, updates);
+    const updates = checkbox.checked
+      ? { completed: true, archived: true }
+      : { completed: false, archived: false };
+    return updateTask(task.id, updates);
   });
 
   const content = document.createElement("div");
@@ -1503,11 +1513,12 @@ async function updateTask(taskId, updates) {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.detail || "Could not update task");
+      throw new Error(apiErrorMessage(data, "Could not update task"));
     }
 
     await loadTasks({ quiet: true });
   } catch (error) {
+    renderTasks();
     showError(error.message);
   }
 }
@@ -1518,13 +1529,15 @@ async function deleteTask(taskId) {
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      throw new Error(data.detail || "Could not delete task");
+      throw new Error(apiErrorMessage(data, "Could not delete task"));
     }
 
     showToast("Item deleted");
     await loadTasks({ quiet: true });
+    return true;
   } catch (error) {
     showError(error.message);
+    return false;
   }
 }
 
@@ -1641,7 +1654,7 @@ function setReviewTimePart(update) {
 }
 
 function handleManualTimeInput() {
-  if (!elements.manualTimeInput?.value) return;
+  if (!elements.manualTimeInput) return;
   setReviewTimeValue(elements.manualTimeInput.value);
 }
 
@@ -1744,7 +1757,7 @@ function fillReviewPanel(task, questions) {
   elements.descriptionInput.value = task.description || "";
   elements.dateInput.value = task.date || "";
   setTimeSelectValue(timeValueFromTask(task));
-  elements.durationInput.value = durationValueFromTask(task);
+  setDurationValue(durationValueFromTask(task));
   updateDurationOptionsForTime();
   refreshProjectOptions(task.project);
   elements.newProjectInput.value = "";
@@ -1912,7 +1925,7 @@ function editableMetadataFromReview() {
 function collectFollowUpAnswers(missingFields = []) {
   const answers = {};
 
-  for (const input of elements.followUpFields.querySelectorAll("input")) {
+  for (const input of elements.followUpFields.querySelectorAll("input, select")) {
     if (!input.value.trim()) continue;
     if (input.name === "duration") {
       answers[input.name] = input.value.trim();
@@ -2011,7 +2024,8 @@ function refreshProjectOptions(selectedProject = null) {
 
 function loadProjectColors() {
   try {
-    return JSON.parse(localStorage.getItem(PROJECT_COLORS_KEY)) || {};
+    const saved = JSON.parse(localStorage.getItem(PROJECT_COLORS_KEY));
+    return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
   } catch {
     return {};
   }
@@ -2020,7 +2034,11 @@ function loadProjectColors() {
 function saveProjectColor(project, color) {
   const clean = cleanProject(project) || DEFAULT_PROJECT_NAME;
   projectColors[clean] = color || DEFAULT_PROJECT_COLOR;
-  localStorage.setItem(PROJECT_COLORS_KEY, JSON.stringify(projectColors));
+  try {
+    localStorage.setItem(PROJECT_COLORS_KEY, JSON.stringify(projectColors));
+  } catch {
+    // Task saving should still work when browser storage is unavailable.
+  }
 }
 
 function projectColor(project) {
@@ -2153,6 +2171,24 @@ function formatMeta(task) {
   if (task.all_day) parts.push({ icon: "event", text: "All day" });
   if (calendarItemDuration(task)) parts.push({ icon: "timer", text: formatDuration(calendarItemDuration(task)) });
   return parts;
+}
+
+function apiErrorMessage(data, fallback) {
+  if (typeof data?.detail === "string") return data.detail || fallback;
+  if (Array.isArray(data?.detail)) {
+    return data.detail.map((error) => error.msg).filter(Boolean).join("; ") || fallback;
+  }
+  return fallback;
+}
+
+async function readApiResponse(response) {
+  try {
+    const data = await response.json();
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Invalid response");
+    return data;
+  } catch {
+    throw new Error(`PlanPal returned an invalid response (HTTP ${response.status}). Check the server terminal, then try Sync again.`);
+  }
 }
 
 function formatDuration(hours) {

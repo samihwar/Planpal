@@ -16,7 +16,7 @@ from task_handler import apply_follow_up_answer, parse_task_with_missing_info
 
 
 router = APIRouter()
-storage = TaskStorage("data/tasks.json")
+storage = TaskStorage()
 DEFAULT_PROJECT_NAME = "no project"
 
 

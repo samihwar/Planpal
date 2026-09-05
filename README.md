@@ -101,3 +101,15 @@ Stop-Process -Name cloudflared-windows-amd64
 ```
 
 Quick Cloudflare Tunnel links are temporary. Each time you stop and start the tunnel, Cloudflare will usually give you a new HTTPS link.
+
+## Regression tests
+
+Install the test client dependency, then run the backend and frontend suites:
+
+```powershell
+python -m pip install httpx
+python -m unittest discover -s tests -p test_regressions.py -v
+node --test tests/frontend.test.cjs
+```
+
+Tests use temporary task files and do not require Ollama. The JSON storage serializes requests within one server process; run the app with a single Uvicorn worker.

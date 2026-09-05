@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Mapping
+import math
 import re
 
 from task_parser import normalize_user_profile, parse_task, resolve_temporal_update, revise_parse
@@ -157,9 +158,12 @@ def apply_follow_up_answer(
     **kwargs,
 ) -> Dict[str, Any]:
     if field == "duration":
-        value = answer
-        if isinstance(answer, str):
+        try:
             value = float(answer)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Duration must be a positive number of hours") from exc
+        if isinstance(answer, bool) or not math.isfinite(value) or value <= 0:
+            raise ValueError("Duration must be a positive number of hours")
         return update_task_field(
             task,
             field,
@@ -170,6 +174,12 @@ def apply_follow_up_answer(
         )
 
     if field in {"date", "time"}:
+        if field == "date" and isinstance(answer, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", answer.strip()):
+            value = datetime.strptime(answer.strip(), "%Y-%m-%d").date().isoformat()
+            return update_task_field(
+                task, field, value, reference_now=reference_now,
+                fields=fields, followup_preference=followup_preference,
+            )
         if field == "time":
             if isinstance(answer, str) and answer.strip().lower() in NO_TIME_ANSWERS:
                 updated = dict(task)
